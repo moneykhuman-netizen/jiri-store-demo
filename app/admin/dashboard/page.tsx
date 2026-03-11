@@ -43,6 +43,14 @@ export default function DashboardPage() {
       href: "/admin/categories",
     },
     {
+      title: "Homepage",
+      value: "-",
+      icon: CheckCircle,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-100",
+      href: "/admin/homepage",
+    },
+    {
       title: "Inventory Value",
       value: `Rs ${(totalValue / 100000).toFixed(1)}L`,
       icon: DollarSign,

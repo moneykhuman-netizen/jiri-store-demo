@@ -65,6 +65,7 @@ export default function AddProductPage() {
     const originalPrice = parseInt(formData.originalPrice) || price;
     const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
+    const stockVal = parseInt(formData.stock) || 0;
     const newProduct: AdminProduct = {
       id: `p${Date.now()}`,
       name: formData.name,
@@ -81,10 +82,10 @@ export default function AddProductPage() {
       images: formData.imageUrl ? [formData.imageUrl] : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80"],
       description: formData.description,
       features: features.filter((f) => f.trim() !== ""),
-      inStock: true,
+      inStock: stockVal > 0,
       isFeatured,
       isNew,
-      stock: parseInt(formData.stock) || 0,
+      stock: stockVal,
     };
 
     addProduct(newProduct);
@@ -167,11 +168,13 @@ export default function AddProductPage() {
                     <SelectValue placeholder="Select brand" />
                   </SelectTrigger>
                   <SelectContent>
-                    {brands.map((brand) => (
-                      <SelectItem key={brand} value={brand}>
-                        {brand}
-                      </SelectItem>
-                    ))}
+                    {brands
+                      .filter((b) => b) // drop empty strings
+                      .map((brand) => (
+                        <SelectItem key={brand} value={brand}>
+                          {brand}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -209,11 +212,13 @@ export default function AddProductPage() {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
+                    {availableTypes
+                      .filter((t) => t) // never render blank type
+                      .map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

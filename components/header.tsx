@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, Menu, X, ChevronDown, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,29 +12,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
-
-const menCategories = [
-  { name: "Sneakers", href: "/products?category=men&type=Sneakers" },
-  { name: "Formal", href: "/products?category=men&type=Formal" },
-  { name: "Sports", href: "/products?category=men&type=Sports" },
-  { name: "Sandals", href: "/products?category=men&type=Sandals" },
-  { name: "Loafers", href: "/products?category=men&type=Loafers" },
-  { name: "Boots", href: "/products?category=men&type=Boots" },
-];
-
-const womenCategories = [
-  { name: "Heels", href: "/products?category=women&type=Heels" },
-  { name: "Flats", href: "/products?category=women&type=Flats" },
-  { name: "Sneakers", href: "/products?category=women&type=Sneakers" },
-  { name: "Sandals", href: "/products?category=women&type=Sandals" },
-  { name: "Wedges", href: "/products?category=women&type=Wedges" },
-  { name: "Boots", href: "/products?category=women&type=Boots" },
-];
+import { useAdminStore } from "@/lib/admin-store";
 
 export function Header() {
+  const [mounted, setMounted] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+
+  const menTypes = useAdminStore((state) => state.categories.men);
+  const womenTypes = useAdminStore((state) => state.categories.women);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,10 +73,10 @@ export function Header() {
                     All Men&apos;s Footwear
                   </Link>
                 </DropdownMenuItem>
-                {menCategories.map((cat) => (
-                  <DropdownMenuItem key={cat.name} asChild>
-                    <Link href={cat.href} className="w-full">
-                      {cat.name}
+                {menTypes.map((type) => (
+                  <DropdownMenuItem key={type} asChild>
+                    <Link href={`/products?category=men&type=${encodeURIComponent(type)}`} className="w-full">
+                      {type}
                     </Link>
                   </DropdownMenuItem>
                 ))}
@@ -102,10 +95,10 @@ export function Header() {
                     All Women&apos;s Footwear
                   </Link>
                 </DropdownMenuItem>
-                {womenCategories.map((cat) => (
-                  <DropdownMenuItem key={cat.name} asChild>
-                    <Link href={cat.href} className="w-full">
-                      {cat.name}
+                {womenTypes.map((type) => (
+                  <DropdownMenuItem key={type} asChild>
+                    <Link href={`/products?category=women&type=${encodeURIComponent(type)}`} className="w-full">
+                      {type}
                     </Link>
                   </DropdownMenuItem>
                 ))}
@@ -183,14 +176,14 @@ export function Header() {
                 >
                   All Men&apos;s
                 </Link>
-                {menCategories.map((cat) => (
+                {menTypes.map((type) => (
                   <Link
-                    key={cat.name}
-                    href={cat.href}
+                    key={type}
+                    href={`/products?category=men&type=${encodeURIComponent(type)}`}
                     className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    {cat.name}
+                    {type}
                   </Link>
                 ))}
               </div>
@@ -205,14 +198,14 @@ export function Header() {
                 >
                   All Women&apos;s
                 </Link>
-                {womenCategories.map((cat) => (
+                {womenTypes.map((type) => (
                   <Link
-                    key={cat.name}
-                    href={cat.href}
+                    key={type}
+                    href={`/products?category=women&type=${encodeURIComponent(type)}`}
                     className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    {cat.name}
+                    {type}
                   </Link>
                 ))}
               </div>

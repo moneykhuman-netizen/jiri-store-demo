@@ -1,6 +1,8 @@
+"use client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Truck, Shield, RotateCcw, Headphones } from "lucide-react";
+import { useAdminStore } from "@/lib/admin-store";
 
 const features = [
   {
@@ -26,6 +28,7 @@ const features = [
 ];
 
 export function PromoSection() {
+  const promo = useAdminStore((s) => s.promoBanner);
   return (
     <section className="bg-background">
       {/* Features Bar */}
@@ -60,13 +63,22 @@ export function PromoSection() {
 
           <div className="relative z-10">
             <p className="text-primary-foreground/80 text-sm uppercase tracking-widest mb-4">
-              Limited Time Offer
+              {promo.badge}
             </p>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-primary-foreground mb-4">
-              Flat 30% Off on First Order
+              {promo.title}
             </h2>
             <p className="text-primary-foreground/80 text-lg mb-8 max-w-xl mx-auto">
-              Use code <span className="font-bold text-primary-foreground">STEPSTYLE30</span> at checkout. Valid for new customers only.
+              {promo.description.split(promo.code).map((part, i, arr) =>
+                i < arr.length - 1 ? (
+                  <span key={i}>
+                    {part}
+                    <span className="font-bold text-primary-foreground">{promo.code}</span>
+                  </span>
+                ) : (
+                  part
+                )
+              )}
             </p>
             <Link href="/products">
               <Button

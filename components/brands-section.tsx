@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { featuredBrands } from "@/lib/products";
+import { useAdminStore } from "@/lib/admin-store";
 import { ChevronRight } from "lucide-react";
 
 const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
@@ -35,9 +35,41 @@ const brandStyles: Record<string, { bg: string; accent: string; logo: string }> 
     accent: "text-red-500",
     logo: "NB"
   },
+  Clarks: {
+    bg: "bg-gradient-to-br from-yellow-700 to-yellow-800",
+    accent: "text-white",
+    logo: "CLARKS"
+  },
+  Woodland: {
+    bg: "bg-gradient-to-br from-green-700 to-green-800",
+    accent: "text-white",
+    logo: "WOODLAND"
+  },
 };
 
 export function BrandsSection() {
+  const brands = useAdminStore((s) => s.brands).slice(0, 6);
+
+  // light-themed fallback styles for unknown brands
+  const fallbackStyles = [
+    { bg: "bg-yellow-100", accent: "text-black" },
+    { bg: "bg-blue-100", accent: "text-black" },
+    { bg: "bg-pink-100", accent: "text-black" },
+    { bg: "bg-green-100", accent: "text-black" },
+    { bg: "bg-orange-100", accent: "text-black" },
+    { bg: "bg-purple-100", accent: "text-black" },
+  ];
+
+  const computeFallback = (brand: string) => {
+    let sum = 0;
+    for (let i = 0; i < brand.length; i++) sum += brand.charCodeAt(i);
+    return fallbackStyles[sum % fallbackStyles.length];
+  };
+
+  if (brands.length === 0) {
+    return null;
+  }
+
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-card">
       <div className="container mx-auto px-4">
@@ -62,12 +94,11 @@ export function BrandsSection() {
 
         {/* Brands Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {featuredBrands.map((brand) => {
-            const style = brandStyles[brand] || { 
-              bg: "bg-gradient-to-br from-muted to-muted/80", 
-              accent: "text-foreground",
-              logo: brand 
-            };
+          {brands.map((brand) => {
+            const style = brandStyles[brand] || (() => {
+              const f = computeFallback(brand);
+              return { bg: f.bg, accent: f.accent, logo: brand };
+            })();
             return (
               <Link
                 key={brand}
@@ -75,7 +106,7 @@ export function BrandsSection() {
                 className={`${style.bg} rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center aspect-square relative overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}
               >
                 {/* Brand Logo Text */}
-                <span className={`text-2xl md:text-3xl font-black tracking-tight text-white text-center z-10`}>
+                <span className={`text-2xl md:text-3xl font-black tracking-tight ${style.accent} text-center z-10`}>
                   {style.logo}
                 </span>
                 

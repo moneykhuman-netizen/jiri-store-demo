@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { ProductCard } from "@/components/product-card";
-import { getProductById, products } from "@/lib/products";
+import { useAdminStore } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,7 +29,8 @@ export default function ProductPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const product = getProductById(id);
+  const products = useAdminStore((state) => state.products);
+  const product = products.find((p) => p.id === id);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -123,6 +124,9 @@ export default function ProductPage({
                 )}
                 {product.discount > 0 && (
                   <Badge variant="destructive">{product.discount}% OFF</Badge>
+                )}
+                {!product.inStock && (
+                  <Badge variant="destructive">Out of Stock</Badge>
                 )}
               </div>
               {/* Actions */}
@@ -255,7 +259,7 @@ export default function ProductPage({
             {/* WhatsApp Order Button */}
             <div className="space-y-3 pt-4">
               <a
-                href={generateWhatsAppLink()}
+                href={product.inStock ? generateWhatsAppLink() : undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block"
@@ -263,15 +267,20 @@ export default function ProductPage({
                 <Button
                   size="lg"
                   className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-14 text-lg"
-                  disabled={!selectedSize || !selectedColor}
+                  disabled={!product.inStock || !selectedSize || !selectedColor}
                 >
                   <MessageCircle className="w-5 h-5" />
-                  Order on WhatsApp
+                  {product.inStock ? "Order on WhatsApp" : "Out of Stock"}
                 </Button>
               </a>
-              {(!selectedSize || !selectedColor) && (
+              {(!selectedSize || !selectedColor) && product.inStock && (
                 <p className="text-sm text-center text-muted-foreground">
                   Please select size and color to proceed
+                </p>
+              )}
+              {!product.inStock && (
+                <p className="text-sm text-center text-muted-foreground">
+                  This product is currently out of stock. Please check back later.
                 </p>
               )}
             </div>

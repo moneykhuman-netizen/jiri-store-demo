@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { Product } from "@/lib/products";
+import { Product } from "@/lib/admin-store";
 import { Badge } from "@/components/ui/badge";
 
 interface ProductCardProps {
@@ -13,14 +13,14 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   return (
     <Link href={`/product/${product.id}`} className="group block">
-      <div className="bg-card rounded-lg overflow-hidden border border-border hover:border-ring hover:shadow-lg transition-all duration-300">
+      <div className={`bg-card rounded-lg overflow-hidden border border-border ${product.inStock ? 'hover:border-ring hover:shadow-lg' : ''} transition-all duration-300`}>
         {/* Image Container */}
         <div className="relative aspect-square overflow-hidden bg-secondary">
           <Image
             src={product.images[0]}
             alt={product.name}
             fill
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            className={`object-cover group-hover:scale-105 transition-transform duration-500 ${!product.inStock ? 'opacity-50' : ''}`}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
           {/* Badges */}
@@ -33,6 +33,11 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.discount > 0 && (
               <Badge variant="destructive" className="text-xs">
                 {product.discount}% OFF
+              </Badge>
+            )}
+            {!product.inStock && (
+              <Badge variant="destructive" className="text-xs">
+                Out of Stock
               </Badge>
             )}
           </div>

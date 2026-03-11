@@ -157,9 +157,8 @@ export default function BrandsPage() {
             <AlertDialogDescription>
               Are you sure you want to delete <strong>{brandToDeleteInfo?.name}</strong>?
               {brandToDeleteInfo && brandToDeleteInfo.count > 0 && (
-                <span className="block mt-2 text-amber-600">
-                  Warning: This brand has {brandToDeleteInfo.count} associated products.
-                  The products will not be deleted but will need to be reassigned.
+                <span className="block mt-2 text-red-600 font-medium">
+                  ⚠️ Deleting this brand will also delete all {brandToDeleteInfo.count} associated products. This action cannot be undone.
                 </span>
               )}
             </AlertDialogDescription>

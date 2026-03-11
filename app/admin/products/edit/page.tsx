@@ -45,7 +45,11 @@ export default function EditProductPage() {
       const originalPrice = formData.originalPrice || price;
       const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
-      updateProduct(editingProduct.id, { ...formData, discount });
+      // ensure stock/inStock values are explicit
+      const stock = formData.stock ?? editingProduct.stock;
+      const inStock = stock > 0;
+
+      updateProduct(editingProduct.id, { ...formData, discount, stock, inStock });
       closeEditDialog();
     }
   };
@@ -156,11 +160,13 @@ export default function EditProductPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {brands.map((brand) => (
-                        <SelectItem key={brand} value={brand}>
-                          {brand}
-                        </SelectItem>
-                      ))}
+                      {brands
+                        .filter((b) => b)
+                        .map((brand) => (
+                          <SelectItem key={brand} value={brand}>
+                            {brand}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -192,11 +198,14 @@ export default function EditProductPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {formData.category && categories[formData.category].map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
+                      {formData.category &&
+                        categories[formData.category]
+                          .filter((t) => t)
+                          .map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
                     </SelectContent>
                   </Select>
                 </div>
