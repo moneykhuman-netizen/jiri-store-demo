@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
@@ -8,12 +9,26 @@ import {
   HeroSection,
   useAdminStore,
 } from "@/lib/admin-store";
+import { subscribeHomepageCategoriesFromFirebase } from "@/lib/firebase/categories";
 
 export function CategoriesSection() {
   const homepageCategories = useAdminStore((s) => s.homepageCategories);
+  const setHomepageCategoriesFromRemote = useAdminStore(
+    (s) => s.setHomepageCategoriesFromRemote
+  );
   const categories = (["men", "women"] as HeroSection[]).map(
     (section) => homepageCategories[section]
   );
+
+  useEffect(() => {
+    const unsubscribe = subscribeHomepageCategoriesFromFirebase((remoteCategories) => {
+      if (remoteCategories) {
+        setHomepageCategoriesFromRemote(remoteCategories);
+      }
+    });
+
+    return unsubscribe;
+  }, [setHomepageCategoriesFromRemote]);
 
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-background">

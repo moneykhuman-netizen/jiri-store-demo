@@ -4,13 +4,40 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { HERO_BUTTON_LINKS, useAdminStore } from "@/lib/admin-store";
+import { subscribeHeroSlidesFromFirebase } from "@/lib/firebase/hero";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
 export function HeroSection() {
   const slides = useAdminStore((s) => s.heroSlides);
+  const setHeroSlidesFromRemote = useAdminStore((s) => s.setHeroSlidesFromRemote);
   const [current, setCurrent] = useState(0);
   const timeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    console.log("[Hero Firebase][storefront] HeroSection subscription effect started");
+
+    const unsubscribe = subscribeHeroSlidesFromFirebase((remoteSlides) => {
+      const currentLocalSlidesLength = useAdminStore.getState().heroSlides.length;
+
+      if (remoteSlides === undefined) {
+        console.log(
+          "[Hero Firebase][storefront] Received undefined remote heroSlides, preserving current local/default heroSlides",
+          { currentLocalSlidesLength }
+        );
+        return;
+      }
+
+      console.log("[Hero Firebase][storefront] Applying remote heroSlides", {
+        currentLocalSlidesLength,
+        remoteHeroSlidesLength: remoteSlides.length,
+      });
+
+      setHeroSlidesFromRemote(remoteSlides);
+    });
+
+    return unsubscribe;
+  }, [setHeroSlidesFromRemote]);
 
   // autoplay every 5s
   useEffect(() => {

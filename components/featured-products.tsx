@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { type AdminProduct, useAdminStore } from "@/lib/admin-store";
+import { subscribeFeaturedCollectionFromFirebase } from "@/lib/firebase/featured";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
@@ -9,6 +11,19 @@ import { ArrowRight } from "lucide-react";
 export function FeaturedProducts() {
   const products = useAdminStore((state) => state.products);
   const featuredCollection = useAdminStore((state) => state.featuredCollection);
+  const setFeaturedCollectionFromRemote = useAdminStore(
+    (state) => state.setFeaturedCollectionFromRemote
+  );
+
+  useEffect(() => {
+    const unsubscribe = subscribeFeaturedCollectionFromFirebase((remoteFeaturedCollection) => {
+      if (remoteFeaturedCollection) {
+        setFeaturedCollectionFromRemote(remoteFeaturedCollection);
+      }
+    });
+
+    return unsubscribe;
+  }, [setFeaturedCollectionFromRemote]);
 
   const productMap = new Map(products.map((product) => [product.id, product] as const));
   const featuredProducts = featuredCollection.productIds

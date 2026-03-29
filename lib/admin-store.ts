@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/lib/products";
+import { saveBrandsToFirebase } from "@/lib/firebase/brands";
 
 // re-export so components can still import from this module
 export type { Product };
@@ -371,15 +372,27 @@ interface AdminState {
     brand: string,
     updates: Partial<BrandPresentation>
   ) => void;
+  setBrandsFromRemote: (
+    brands: string[],
+    brandPresentations: Record<string, BrandPresentation>
+  ) => void;
   addCategory: (gender: "men" | "women", category: string) => void;
   removeCategory: (gender: "men" | "women", category: string) => void;
   // homepage actions
   addHeroSlide: (slide: HeroSlide) => void;
   updateHeroSlide: (slide: HeroSlide) => void;
   deleteHeroSlide: (id: string) => void;
+  setHeroSlidesFromRemote: (slides: HeroSlide[]) => void;
   updateHomepageCategory: (category: HomepageCategoryCard) => void;
+  setHomepageCategoriesFromRemote: (
+    homepageCategories: Record<HeroSection, HomepageCategoryCard>
+  ) => void;
   updateFeaturedCollection: (featuredCollection: FeaturedCollectionSettings) => void;
+  setFeaturedCollectionFromRemote: (
+    featuredCollection: Partial<FeaturedCollectionSettings>
+  ) => void;
   updatePromoBanner: (banner: PromoBanner) => void;
+  setPromoBannerFromRemote: (banner: PromoBanner) => void;
   updateSocialLinks: (links: SocialLinks) => void;
   // legacy (kept for compatibility but not used anymore)
   updateHeroBanner: (banner: any) => void;
@@ -622,6 +635,9 @@ export const useAdminStore = create<AdminState>()(
               state.brandPresentations
             ),
           });
+          void saveBrandsToFirebase(get().brands, get().brandPresentations).catch((error) => {
+            console.error("Failed to save brands to Firebase:", error);
+          });
         }
       },
 
@@ -660,6 +676,9 @@ export const useAdminStore = create<AdminState>()(
             categories: remainingCategories,
           };
         });
+        void saveBrandsToFirebase(get().brands, get().brandPresentations).catch((error) => {
+          console.error("Failed to save brands to Firebase:", error);
+        });
       },
 
       updateBrandPresentation: (brand, updates) => {
@@ -672,6 +691,15 @@ export const useAdminStore = create<AdminState>()(
             }),
           },
         }));
+        void saveBrandsToFirebase(get().brands, get().brandPresentations).catch((error) => {
+          console.error("Failed to save brands to Firebase:", error);
+        });
+      },
+      setBrandsFromRemote: (brands, brandPresentations) => {
+        set({
+          brands,
+          brandPresentations,
+        });
       },
 
       addCategory: (gender: "men" | "women", category: string) => {
@@ -713,6 +741,11 @@ export const useAdminStore = create<AdminState>()(
           heroSlides: state.heroSlides.filter((s) => s.id !== id),
         }));
       },
+      setHeroSlidesFromRemote: (slides) => {
+        set({
+          heroSlides: normalizeHeroSlides(slides),
+        });
+      },
       updateHomepageCategory: (category) => {
         set((state) => ({
           homepageCategories: {
@@ -720,6 +753,11 @@ export const useAdminStore = create<AdminState>()(
             [category.section]: normalizeHomepageCategoryCard(category, category.section),
           },
         }));
+      },
+      setHomepageCategoriesFromRemote: (homepageCategories) => {
+        set({
+          homepageCategories,
+        });
       },
       updateFeaturedCollection: (featuredCollection) => {
         set((state) => ({
@@ -729,7 +767,18 @@ export const useAdminStore = create<AdminState>()(
           ),
         }));
       },
+      setFeaturedCollectionFromRemote: (featuredCollection) => {
+        set((state) => ({
+          featuredCollection: normalizeFeaturedCollection(
+            featuredCollection,
+            state.products
+          ),
+        }));
+      },
       updatePromoBanner: (banner) => {
+        set({ promoBanner: banner });
+      },
+      setPromoBannerFromRemote: (banner) => {
         set({ promoBanner: banner });
       },
       updateSocialLinks: (links) => {

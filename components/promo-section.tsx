@@ -1,8 +1,10 @@
 "use client";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Truck, Shield, RotateCcw, Headphones } from "lucide-react";
 import { useAdminStore } from "@/lib/admin-store";
+import { subscribePromoBannerFromFirebase } from "@/lib/firebase/promo";
 
 const features = [
   {
@@ -29,6 +31,18 @@ const features = [
 
 export function PromoSection() {
   const promo = useAdminStore((s) => s.promoBanner);
+  const setPromoBannerFromRemote = useAdminStore((s) => s.setPromoBannerFromRemote);
+
+  useEffect(() => {
+    const unsubscribe = subscribePromoBannerFromFirebase((remotePromo) => {
+      if (remotePromo) {
+        setPromoBannerFromRemote(remotePromo);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
   return (
     <section className="bg-background">
       {/* Features Bar */}

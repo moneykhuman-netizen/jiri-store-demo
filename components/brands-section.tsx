@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { BrandTheme, useAdminStore } from "@/lib/admin-store";
+import { subscribeBrandsFromFirebase } from "@/lib/firebase/brands";
 import { ChevronRight } from "lucide-react";
 
 const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
@@ -73,6 +75,16 @@ const themeStyles: Record<Exclude<BrandTheme, "auto">, { bg: string; accent: str
 export function BrandsSection() {
   const brands = useAdminStore((s) => s.brands).slice(0, 6);
   const brandPresentations = useAdminStore((s) => s.brandPresentations);
+  const setBrandsFromRemote = useAdminStore((s) => s.setBrandsFromRemote);
+
+  useEffect(() => {
+    const unsubscribe = subscribeBrandsFromFirebase((remote) => {
+      if (remote) {
+        setBrandsFromRemote(remote.brands, remote.brandPresentations);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // light-themed fallback styles for unknown brands
   const fallbackStyles = [

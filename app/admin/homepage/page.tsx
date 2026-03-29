@@ -14,6 +14,10 @@ import {
   SocialLinks,
   useAdminStore,
 } from "@/lib/admin-store";
+import { saveHomepageCategoriesToFirebase } from "@/lib/firebase/categories";
+import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
+import { saveHeroSlidesToFirebase } from "@/lib/firebase/hero";
+import { savePromoBannerToFirebase } from "@/lib/firebase/promo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -108,7 +112,23 @@ export default function HomepageSettingsPage() {
       addHeroSlide({ ...nextSlide, id: Date.now().toString() });
     }
 
+    const latestSlides = useAdminStore.getState().heroSlides;
     resetSlideForm(nextSlide.section);
+
+    console.log("[Hero Firebase][admin] Local Hero slide save succeeded", {
+      latestSlidesLength: latestSlides.length,
+    });
+    console.log("[Hero Firebase][admin] Starting remote Firebase write for Hero slides", {
+      latestSlidesLength: latestSlides.length,
+    });
+
+    void (async () => {
+      try {
+        await saveHeroSlidesToFirebase(latestSlides);
+      } catch (error) {
+        console.error("Failed to save hero slides to Firebase:", error);
+      }
+    })();
   };
 
   const handleDeleteSlide = (id: string) => {
@@ -117,17 +137,38 @@ export default function HomepageSettingsPage() {
     }
 
     deleteHeroSlide(id);
+    const latestSlides = useAdminStore.getState().heroSlides;
+
+    console.log("[Hero Firebase][admin] Local Hero slide delete succeeded", {
+      latestSlidesLength: latestSlides.length,
+    });
+    console.log("[Hero Firebase][admin] Starting remote Firebase write for Hero slides", {
+      latestSlidesLength: latestSlides.length,
+    });
+
+    void (async () => {
+      try {
+        await saveHeroSlidesToFirebase(latestSlides);
+      } catch (error) {
+        console.error("Failed to save hero slides to Firebase:", error);
+      }
+    })();
   };
 
-  const handlePromoSubmit = (e: React.FormEvent) => {
+  const handlePromoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     updatePromo(promoForm);
+    await savePromoBannerToFirebase(promoForm);
   };
 
-  const handleCategorySubmit = (e: React.FormEvent) => {
+  const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     updateHomepageCategory(categoryForms.men);
     updateHomepageCategory(categoryForms.women);
+    await saveHomepageCategoriesToFirebase({
+      men: categoryForms.men,
+      women: categoryForms.women,
+    });
   };
 
   const handleFeaturedSubmit = (e: React.FormEvent) => {
@@ -142,6 +183,16 @@ export default function HomepageSettingsPage() {
           availableProductIds.has(productId) && productIds.indexOf(productId) === index
       ),
     });
+
+    const latestFeaturedCollection = useAdminStore.getState().featuredCollection;
+
+    void (async () => {
+      try {
+        await saveFeaturedCollectionToFirebase(latestFeaturedCollection);
+      } catch (error) {
+        console.error("Failed to save featured collection to Firebase:", error);
+      }
+    })();
   };
 
   const handleSocialSubmit = (e: React.FormEvent) => {
