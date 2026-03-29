@@ -15,7 +15,7 @@ function ProductsContent() {
   const searchParams = useSearchParams();
   const products = useAdminStore((state) => state.products);
   
-  const category = searchParams.get("category") as "men" | "women" | null;
+  const category = searchParams.get("category")?.toLowerCase() || null;
   const brand = searchParams.get("brand");
   const type = searchParams.get("type");
   const size = searchParams.get("size");
@@ -34,8 +34,10 @@ function ProductsContent() {
       : [...products];
 
     if (category) {
-      result = result.filter((p) => p.category === category);
-    }
+  result = result.filter(
+    (p) => p.category?.toLowerCase() === category
+  );
+}
     if (brand) {
       result = result.filter((p) => p.brand === brand);
     }

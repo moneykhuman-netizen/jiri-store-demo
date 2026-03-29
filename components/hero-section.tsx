@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { useAdminStore } from "@/lib/admin-store";
+import { HERO_BUTTON_LINKS, useAdminStore } from "@/lib/admin-store";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
@@ -43,19 +43,24 @@ export function HeroSection() {
 
   if (slides.length === 0) return null;
 
-  const slide = slides[current];
+  const activeIndex = current >= slides.length ? 0 : current;
+  const slide = slides[activeIndex];
+  const imageSrc = typeof slide.image === "string" ? slide.image.trim() : "";
+  const hasImage = imageSrc.length > 0;
 
   return (
-    <section className="relative h-[50vh] md:h-[70vh] lg:h-[80vh] overflow-hidden bg-secondary">
+    <section className="relative mt-3 h-[50vh] md:h-[70vh] lg:h-[80vh] overflow-hidden bg-secondary">
       {/* background */}
       <div className="absolute inset-0">
-        <Image
-          src={slide.image}
-          alt={slide.title}
-          fill
-          className="object-cover"
-          priority
-        />
+        {hasImage ? (
+          <Image
+            src={imageSrc}
+            alt={slide.title}
+            fill
+            className="object-cover"
+            priority
+          />
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-r from-foreground/70 via-foreground/30 to-transparent" />
       </div>
 
@@ -65,13 +70,13 @@ export function HeroSection() {
           <p className="text-accent font-medium text-sm md:text-base uppercase tracking-widest mb-2 md:mb-4">
             {slide.badge}
           </p>
-          <h2 className="text-3xl md:text-5xl lg:text-6xl font-serif font-bold text-card mb-3 md:mb-6 text-balance">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold leading-tight text-card mb-3 md:mb-6 text-balance">
             {slide.title}
           </h2>
           <p className="text-card/80 text-sm md:text-lg mb-6 md:mb-8 max-w-md leading-relaxed">
             {slide.description}
           </p>
-          <Link href={slide.buttonLink}>
+          <Link href={HERO_BUTTON_LINKS[slide.section]}>
             <Button
               size="lg"
               className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8"
@@ -106,7 +111,7 @@ export function HeroSection() {
               <button
                 key={idx}
                 onClick={() => goTo(idx)}
-                className={`w-3 h-3 rounded-full ${idx === current ? "bg-accent" : "bg-white/60"}`}
+                className={`w-3 h-3 rounded-full ${idx === activeIndex ? "bg-accent" : "bg-white/60"}`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
             ))}

@@ -1,10 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useAdminStore } from "@/lib/admin-store";
+import {
+  BRAND_THEME_OPTIONS,
+  BrandTheme,
+  useAdminStore,
+} from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,14 +26,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Trash2, Tags, Package } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Tags } from "lucide-react";
 import Link from "next/link";
 
 export default function BrandsPage() {
   const brands = useAdminStore((state) => state.brands);
+  const brandPresentations = useAdminStore((state) => state.brandPresentations);
   const products = useAdminStore((state) => state.products);
   const addBrand = useAdminStore((state) => state.addBrand);
   const removeBrand = useAdminStore((state) => state.removeBrand);
+  const updateBrandPresentation = useAdminStore((state) => state.updateBrandPresentation);
 
   const [newBrand, setNewBrand] = useState("");
   const [brandToDelete, setBrandToDelete] = useState<string | null>(null);
@@ -57,6 +70,15 @@ export default function BrandsPage() {
   const brandToDeleteInfo = brandToDelete
     ? { name: brandToDelete, count: getProductCount(brandToDelete) }
     : null;
+
+  const themeLabels: Record<BrandTheme, string> = {
+    auto: "Auto",
+    neutral: "Neutral",
+    red: "Red",
+    blue: "Blue",
+    green: "Green",
+    gold: "Gold",
+  };
 
   return (
     <div className="space-y-6">
@@ -120,27 +142,59 @@ export default function BrandsPage() {
                 return (
                   <div
                     key={brand}
-                    className="flex items-center justify-between p-4 rounded-lg border border-border bg-card"
+                    className="space-y-4 rounded-lg border border-border bg-card p-4"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Tags className="w-5 h-5 text-primary" />
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Tags className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{brand}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {productCount} {productCount === 1 ? "product" : "products"}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{brand}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {productCount} {productCount === 1 ? "product" : "products"}
-                        </p>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setBrandToDelete(brand)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() => setBrandToDelete(brand)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                    <div className="space-y-3">
+                      <Input
+                        placeholder="Tagline / motto (optional)"
+                        value={brandPresentations[brand]?.tagline ?? ""}
+                        onChange={(e) =>
+                          updateBrandPresentation(brand, {
+                            tagline: e.target.value,
+                          })
+                        }
+                      />
+
+                      <Select
+                        value={brandPresentations[brand]?.theme ?? "auto"}
+                        onValueChange={(value: BrandTheme) =>
+                          updateBrandPresentation(brand, { theme: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select card theme" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BRAND_THEME_OPTIONS.map((theme) => (
+                            <SelectItem key={theme} value={theme}>
+                              {themeLabels[theme]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 );
               })}

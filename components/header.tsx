@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Search, Menu, X, ChevronDown, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,8 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+  const announcementMessage =
+    "Free Delivery Across India \u2022 COD Available \u2022 T&C apply";
 
   const menTypes = useAdminStore((state) => state.categories.men);
   const womenTypes = useAdminStore((state) => state.categories.women);
@@ -40,24 +43,50 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 bg-card border-b border-border shadow-sm">
       {/* Top Banner */}
-      <div className="bg-primary text-primary-foreground text-center py-2 text-sm">
-        Free Delivery on Orders Above Rs 2,999 | Use Code: JIRI10 for 10% Off
+      <div className="announcement-bar group relative overflow-hidden py-2 text-center text-sm font-medium text-white">
+        <div className="announcement-glow pointer-events-none absolute inset-0" />
+        <div className="announcement-vignette pointer-events-none absolute inset-0" />
+
+        <div className="relative z-10 overflow-hidden">
+          <div className="announcement-track flex w-max items-center whitespace-nowrap">
+            {Array.from({ length: 6 }, (_, blockIndex) => (
+              <span
+                key={blockIndex}
+                aria-hidden={blockIndex > 0}
+                className="announcement-block inline-flex shrink-0 items-center px-8 pr-20 md:px-10 md:pr-24"
+              >
+                {announcementMessage}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Main Header */}
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16 gap-4">
+      <div className="container mx-auto px-1">
+        <div className="flex items-center justify-between h-[72px] gap-4">
           {/* Logo */}
-          <Link href="/" className="flex-shrink-0 group">
-            <div className="flex flex-col items-start leading-none">
-              <span className="text-xl sm:text-2xl font-sans font-black tracking-tight text-foreground uppercase">
-                JIRI
-              </span>
-              <span className="text-[9px] sm:text-[10px] font-medium tracking-[0.2em] text-muted-foreground uppercase group-hover:text-foreground transition-colors">
-                Pick Up Store
-              </span>
-            </div>
-          </Link>
+          <Link href="/" className="flex items-center shrink-0 -ml-4 relative top-[2px]">
+  <div className="flex flex-col items-start justify-center">
+    <Image
+      src="/logo.png"
+      alt="Pickup Jiristore"
+      width={180}
+      height={70}
+      priority
+      unoptimized
+      className="h-27 w-auto object-contain"
+    />
+    <Image
+     src="/manipuri.png"
+      alt="Manipuri text"
+      width={180}
+      height={24
+}
+      className="mt-1 h-5 w-auto object-contain"
+    />
+  </div>
+</Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-1">
@@ -213,6 +242,57 @@ export function Header() {
           </nav>
         </div>
       )}
+
+      <style jsx>{`
+        .announcement-bar {
+          background: linear-gradient(
+            90deg,
+            #160714 0%,
+            #281127 28%,
+            #4d213c 50%,
+            #281127 72%,
+            #160714 100%
+          );
+        }
+
+        .announcement-glow {
+          background:
+            radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.11), transparent 44%),
+            linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 70%);
+          opacity: 0.72;
+        }
+
+        .announcement-vignette {
+          background:
+            radial-gradient(circle at 50% 50%, transparent 34%, rgba(0, 0, 0, 0.16) 100%);
+        }
+
+        .announcement-track {
+          animation: announcement-marquee 32s linear infinite;
+          will-change: transform;
+          transform: translateZ(0);
+          backface-visibility: hidden;
+        }
+
+        .announcement-block {
+          letter-spacing: 0.08em;
+          text-shadow: 0 1px 10px rgba(0, 0, 0, 0.28);
+        }
+
+        .group:hover .announcement-track {
+          animation-play-state: paused;
+        }
+
+        @keyframes announcement-marquee {
+          from {
+            transform: translate3d(0, 0, 0);
+          }
+
+          to {
+            transform: translate3d(-16.6667%, 0, 0);
+          }
+        }
+      `}</style>
     </header>
   );
 }

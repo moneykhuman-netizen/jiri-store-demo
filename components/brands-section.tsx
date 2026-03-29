@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useAdminStore } from "@/lib/admin-store";
+import { BrandTheme, useAdminStore } from "@/lib/admin-store";
 import { ChevronRight } from "lucide-react";
 
 const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
@@ -47,8 +47,32 @@ const brandStyles: Record<string, { bg: string; accent: string; logo: string }> 
   },
 };
 
+const themeStyles: Record<Exclude<BrandTheme, "auto">, { bg: string; accent: string }> = {
+  neutral: {
+    bg: "bg-gradient-to-br from-neutral-900 to-neutral-700",
+    accent: "text-white",
+  },
+  red: {
+    bg: "bg-gradient-to-br from-red-600 to-red-700",
+    accent: "text-white",
+  },
+  blue: {
+    bg: "bg-gradient-to-br from-blue-600 to-blue-700",
+    accent: "text-white",
+  },
+  green: {
+    bg: "bg-gradient-to-br from-green-700 to-green-800",
+    accent: "text-white",
+  },
+  gold: {
+    bg: "bg-gradient-to-br from-yellow-700 to-yellow-800",
+    accent: "text-white",
+  },
+};
+
 export function BrandsSection() {
   const brands = useAdminStore((s) => s.brands).slice(0, 6);
+  const brandPresentations = useAdminStore((s) => s.brandPresentations);
 
   // light-themed fallback styles for unknown brands
   const fallbackStyles = [
@@ -95,10 +119,22 @@ export function BrandsSection() {
         {/* Brands Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {brands.map((brand) => {
-            const style = brandStyles[brand] || (() => {
+            const baseStyle = brandStyles[brand] || (() => {
               const f = computeFallback(brand);
               return { bg: f.bg, accent: f.accent, logo: brand };
             })();
+            const presentation = brandPresentations[brand];
+            const theme =
+              presentation?.theme && presentation.theme !== "auto"
+                ? themeStyles[presentation.theme]
+                : null;
+            const style = theme
+              ? { ...baseStyle, bg: theme.bg, accent: theme.accent }
+              : baseStyle;
+            const tagline = presentation?.tagline?.trim() ?? "";
+            const taglineClass =
+              style.accent === "text-black" ? "text-black/60" : "text-white/60";
+
             return (
               <Link
                 key={brand}
@@ -111,24 +147,14 @@ export function BrandsSection() {
                 </span>
                 
                 {/* Subtle tagline */}
-                <span className="text-white/60 text-xs mt-2 font-medium uppercase tracking-wider z-10">
-                  {brand === "New Balance" ? "Fresh Foam" : 
-                   brand === "Nike" ? "Just Do It" :
-                   brand === "Adidas" ? "Impossible is Nothing" :
-                   brand === "Puma" ? "Forever Faster" :
-                   brand === "Reebok" ? "Be More Human" :
-                   brand === "Skechers" ? "Comfort Tech" : ""}
-                </span>
+                {tagline ? (
+                  <span className={`${taglineClass} text-xs mt-2 font-medium uppercase tracking-wider z-10`}>
+                    {tagline}
+                  </span>
+                ) : null}
 
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                
-                {/* Shop Now indicator */}
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-                  <span className="text-white text-xs font-semibold bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">
-                    Shop Now
-                  </span>
-                </div>
               </Link>
             );
           })}

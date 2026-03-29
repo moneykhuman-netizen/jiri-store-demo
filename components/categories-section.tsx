@@ -1,27 +1,20 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-
-const categories = [
-  {
-    id: "men",
-    title: "Men's Collection",
-    description: "Sneakers, Formals, Boots & More",
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
-    href: "/products?category=men",
-    count: "150+ Styles",
-  },
-  {
-    id: "women",
-    title: "Women's Collection",
-    description: "Heels, Flats, Wedges & More",
-    image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=80",
-    href: "/products?category=women",
-    count: "200+ Styles",
-  },
-];
+import {
+  CATEGORY_CARD_LINKS,
+  HeroSection,
+  useAdminStore,
+} from "@/lib/admin-store";
 
 export function CategoriesSection() {
+  const homepageCategories = useAdminStore((s) => s.homepageCategories);
+  const categories = (["men", "women"] as HeroSection[]).map(
+    (section) => homepageCategories[section]
+  );
+
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-background">
       <div className="container mx-auto px-4">
@@ -37,39 +30,49 @@ export function CategoriesSection() {
 
         {/* Category Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-          {categories.map((category) => (
-            <Link
-              key={category.id}
-              href={category.href}
-              className="group relative overflow-hidden rounded-xl aspect-[16/10] md:aspect-[16/9]"
-            >
-              {/* Background Image */}
-              <Image
-                src={category.image}
-                alt={category.title}
-                fill
-                className="object-cover group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-foreground/30 to-transparent" />
+          {categories.map((category) => {
+            const imageSrc =
+              typeof category.image === "string" ? category.image.trim() : "";
+            const hasImage = imageSrc.length > 0;
 
-              {/* Content */}
-              <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
-                <span className="text-accent text-sm font-medium mb-2">
-                  {category.count}
-                </span>
-                <h3 className="text-2xl md:text-3xl font-serif font-bold text-card mb-2">
-                  {category.title}
-                </h3>
-                <p className="text-card/80 text-sm md:text-base mb-4">
-                  {category.description}
-                </p>
-                <div className="flex items-center gap-2 text-card font-medium group-hover:gap-3 transition-all">
-                  <span>Explore Collection</span>
-                  <ArrowRight className="w-4 h-4" />
+            return (
+              <Link
+                key={category.section}
+                href={CATEGORY_CARD_LINKS[category.section]}
+                className="group relative overflow-hidden rounded-xl aspect-[16/10] md:aspect-[16/9]"
+              >
+                {/* Background Image */}
+                {hasImage ? (
+                  <Image
+                    src={imageSrc}
+                    alt={category.title}
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
+                ) : null}
+                <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-foreground/30 to-transparent" />
+
+                {/* Content */}
+                <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end">
+                  {category.label ? (
+                    <span className="text-accent text-sm font-medium mb-2">
+                      {category.label}
+                    </span>
+                  ) : null}
+                  <h3 className="text-2xl md:text-3xl font-serif font-bold text-card mb-2">
+                    {category.title}
+                  </h3>
+                  <p className="text-card/80 text-sm md:text-base mb-4">
+                    {category.description}
+                  </p>
+                  <div className="flex items-center gap-2 text-card font-medium group-hover:gap-3 transition-all">
+                    <span>Explore Collection</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       </div>
     </section>

@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useAdminStore } from "@/lib/admin-store";
+import { type AdminProduct, useAdminStore } from "@/lib/admin-store";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
 export function FeaturedProducts() {
   const products = useAdminStore((state) => state.products);
-  const featuredProducts = products.filter((product) => product.isFeatured);
+  const featuredCollection = useAdminStore((state) => state.featuredCollection);
+
+  const productMap = new Map(products.map((product) => [product.id, product] as const));
+  const featuredProducts = featuredCollection.productIds
+    .map((productId) => productMap.get(productId))
+    .filter((product): product is AdminProduct => Boolean(product));
 
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-secondary">
@@ -16,10 +21,10 @@ export function FeaturedProducts() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
           <div>
             <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif font-bold text-foreground">
-              Featured Collection
+              {featuredCollection.title}
             </h2>
             <p className="text-muted-foreground max-w-xl">
-              Handpicked styles that are trending right now. Premium quality at unbeatable prices.
+              {featuredCollection.description}
             </p>
           </div>
 

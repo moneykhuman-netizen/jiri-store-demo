@@ -18,14 +18,16 @@ export interface AdminProduct extends Product {
   stock: number;
 }
 
+export type HeroSection = "men" | "women";
+
 export interface HeroSlide {
   id: string;
   badge: string;
   title: string;
   description: string;
   buttonText: string;
-  buttonLink: string;
   image: string;
+  section: HeroSection;
 }
 
 export interface PromoBanner {
@@ -41,16 +43,315 @@ export interface SocialLinks {
   whatsapp: string;
 }
 
+export const BRAND_THEME_OPTIONS = [
+  "auto",
+  "neutral",
+  "red",
+  "blue",
+  "green",
+  "gold",
+] as const;
+
+export type BrandTheme = (typeof BRAND_THEME_OPTIONS)[number];
+
+export interface BrandPresentation {
+  tagline: string;
+  theme: BrandTheme;
+}
+
+export interface HomepageCategoryCard {
+  section: HeroSection;
+  title: string;
+  description: string;
+  image: string;
+  label: string;
+}
+
+export interface FeaturedCollectionSettings {
+  title: string;
+  description: string;
+  productIds: string[];
+}
+
+export const HERO_BUTTON_LINKS: Record<HeroSection, string> = {
+  men: "/products?category=men",
+  women: "/products?category=women",
+};
+
+export const CATEGORY_CARD_LINKS: Record<HeroSection, string> = {
+  men: "/products?category=men",
+  women: "/products?category=women",
+};
+
+const HERO_DEFAULT_SLIDES: HeroSlide[] = [
+  {
+    id: "hero-women-default",
+    badge: "ELEGANCE REDEFINED",
+    title: "Women's Collection",
+    description: "Heels, flats, sneakers and more. Style that speaks volumes.",
+    buttonText: "Shop Women",
+    image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=1600&q=80",
+    section: "women",
+  },
+  {
+    id: "hero-men-default",
+    badge: "MODERN ESSENTIALS",
+    title: "Men's Collection",
+    description: "Sneakers, boots, formals and more. Built for every step ahead.",
+    buttonText: "Shop Men",
+    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1600&q=80",
+    section: "men",
+  },
+];
+
+const HOMEPAGE_CATEGORY_DEFAULTS: Record<HeroSection, HomepageCategoryCard> = {
+  men: {
+    section: "men",
+    title: "Men's Collection",
+    description: "Sneakers, Formals, Boots & More",
+    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
+    label: "150+ Styles",
+  },
+  women: {
+    section: "women",
+    title: "Women's Collection",
+    description: "Heels, Flats, Wedges & More",
+    image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&q=80",
+    label: "200+ Styles",
+  },
+};
+
+const FEATURED_COLLECTION_COPY_DEFAULTS = {
+  title: "Featured Collection",
+  description:
+    "Handpicked styles that are trending right now. Premium quality at unbeatable prices.",
+};
+
+const DEFAULT_BRAND_PRESENTATIONS: Record<string, Partial<BrandPresentation>> = {
+  Nike: { tagline: "Just Do It" },
+  Adidas: { tagline: "Impossible is Nothing" },
+  Puma: { tagline: "Forever Faster" },
+  Reebok: { tagline: "Be More Human" },
+  Skechers: { tagline: "Comfort Tech" },
+  "New Balance": { tagline: "Fresh Foam" },
+};
+
+type PersistedHeroSlide = Partial<HeroSlide> & {
+  buttonLink?: string;
+};
+
+type PersistedBrandPresentation = Partial<BrandPresentation>;
+
+type PersistedHomepageCategoryCard = Partial<HomepageCategoryCard> & {
+  id?: string;
+  count?: string;
+};
+
+const isBrandTheme = (theme: string): theme is BrandTheme =>
+  BRAND_THEME_OPTIONS.includes(theme as BrandTheme);
+
+const normalizeBrandPresentation = (
+  brand: string,
+  presentation?: PersistedBrandPresentation
+): BrandPresentation => {
+  const defaults = DEFAULT_BRAND_PRESENTATIONS[brand];
+  const hasCustomTagline = presentation && "tagline" in presentation;
+
+  return {
+    tagline: hasCustomTagline
+      ? presentation?.tagline ?? ""
+      : defaults?.tagline ?? "",
+    theme: presentation?.theme && isBrandTheme(presentation.theme)
+      ? presentation.theme
+      : defaults?.theme && isBrandTheme(defaults.theme)
+        ? defaults.theme
+        : "auto",
+  };
+};
+
+const syncBrandPresentations = (
+  brands: string[],
+  presentations?: Record<string, PersistedBrandPresentation>
+): Record<string, BrandPresentation> =>
+  Object.fromEntries(
+    brands.map((brand) => [
+      brand,
+      normalizeBrandPresentation(brand, presentations?.[brand]),
+    ])
+  );
+
+const inferHomepageCategorySection = (
+  category?: PersistedHomepageCategoryCard,
+  fallbackSection: HeroSection = "women"
+): HeroSection => {
+  if (category?.section === "men" || category?.section === "women") {
+    return category.section;
+  }
+  if (category?.id === "men" || category?.id === "women") {
+    return category.id;
+  }
+  return fallbackSection;
+};
+
+const inferHeroSection = (
+  slide?: PersistedHeroSlide,
+  fallbackSection: HeroSection = "women"
+): HeroSection => {
+  if (slide?.section === "men" || slide?.section === "women") {
+    return slide.section;
+  }
+
+  const legacyLink = slide?.buttonLink?.toLowerCase() ?? "";
+  if (legacyLink.includes("category=men")) {
+    return "men";
+  }
+  if (legacyLink.includes("category=women")) {
+    return "women";
+  }
+
+  const sectionCopy = [
+    slide?.badge,
+    slide?.title,
+    slide?.description,
+    slide?.buttonText,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (sectionCopy.includes("women")) {
+    return "women";
+  }
+  if (sectionCopy.includes("men")) {
+    return "men";
+  }
+
+  return fallbackSection;
+};
+
+const getDefaultHeroSlide = (section: HeroSection) =>
+  HERO_DEFAULT_SLIDES.find((slide) => slide.section === section) ?? HERO_DEFAULT_SLIDES[0];
+
+const normalizeHeroSlide = (
+  slide: PersistedHeroSlide,
+  fallbackSection: HeroSection = "women"
+): HeroSlide => {
+  const section = inferHeroSection(slide, fallbackSection);
+  const defaults = getDefaultHeroSlide(section);
+
+  return {
+    id: slide.id?.toString() || defaults.id,
+    badge: slide.badge ?? defaults.badge,
+    title: slide.title ?? defaults.title,
+    description: slide.description ?? defaults.description,
+    buttonText: slide.buttonText ?? defaults.buttonText,
+    image: slide.image ?? defaults.image,
+    section,
+  };
+};
+
+const normalizeHeroSlides = (slides?: PersistedHeroSlide[]): HeroSlide[] => {
+  if (!Array.isArray(slides)) {
+    return HERO_DEFAULT_SLIDES.map((slide) => ({ ...slide }));
+  }
+
+  if (slides.length === 0) {
+    return [];
+  }
+
+  return slides.map((slide, index) =>
+    normalizeHeroSlide(
+      slide,
+      HERO_DEFAULT_SLIDES[index % HERO_DEFAULT_SLIDES.length]?.section ?? "women"
+    )
+  );
+};
+
+const normalizeHomepageCategoryCard = (
+  category: PersistedHomepageCategoryCard | undefined,
+  fallbackSection: HeroSection
+): HomepageCategoryCard => {
+  const section = inferHomepageCategorySection(category, fallbackSection);
+  const defaults = HOMEPAGE_CATEGORY_DEFAULTS[section];
+
+  return {
+    section,
+    title: category?.title ?? defaults.title,
+    description: category?.description ?? defaults.description,
+    image: category?.image ?? defaults.image,
+    label: category?.label ?? category?.count ?? defaults.label,
+  };
+};
+
+const normalizeHomepageCategories = (
+  categories?:
+    | Partial<Record<HeroSection, PersistedHomepageCategoryCard>>
+    | PersistedHomepageCategoryCard[]
+): Record<HeroSection, HomepageCategoryCard> => {
+  if (Array.isArray(categories)) {
+    const bySection = categories.reduce<
+      Partial<Record<HeroSection, PersistedHomepageCategoryCard>>
+    >((acc, category, index) => {
+      const section = inferHomepageCategorySection(
+        category,
+        index === 0 ? "men" : "women"
+      );
+      acc[section] = category;
+      return acc;
+    }, {});
+
+    return {
+      men: normalizeHomepageCategoryCard(bySection.men, "men"),
+      women: normalizeHomepageCategoryCard(bySection.women, "women"),
+    };
+  }
+
+  return {
+    men: normalizeHomepageCategoryCard(categories?.men, "men"),
+    women: normalizeHomepageCategoryCard(categories?.women, "women"),
+  };
+};
+
+const getDefaultFeaturedCollection = (
+  products: AdminProduct[]
+): FeaturedCollectionSettings => ({
+  ...FEATURED_COLLECTION_COPY_DEFAULTS,
+  productIds: products.filter((product) => product.isFeatured).map((product) => product.id),
+});
+
+const normalizeFeaturedCollection = (
+  featuredCollection: Partial<FeaturedCollectionSettings> | undefined,
+  products: AdminProduct[]
+): FeaturedCollectionSettings => {
+  const defaults = getDefaultFeaturedCollection(products);
+  const validProductIds = new Set(products.map((product) => product.id));
+  const normalizedProductIds = Array.isArray(featuredCollection?.productIds)
+    ? featuredCollection.productIds.filter(
+        (productId, index, productIds) =>
+          validProductIds.has(productId) && productIds.indexOf(productId) === index
+      )
+    : defaults.productIds;
+
+  return {
+    title: featuredCollection?.title ?? defaults.title,
+    description: featuredCollection?.description ?? defaults.description,
+    productIds: normalizedProductIds,
+  };
+};
+
 interface AdminState {
   isAuthenticated: boolean;
   products: AdminProduct[];
   brands: string[];
+  brandPresentations: Record<string, BrandPresentation>;
   categories: { men: string[]; women: string[] };
   // homepage settings
   heroSlides: HeroSlide[];
+  homepageCategories: Record<HeroSection, HomepageCategoryCard>;
+  featuredCollection: FeaturedCollectionSettings;
   promoBanner: PromoBanner;
   socialLinks: SocialLinks;
-  // legacy single banner (mirrored from first slide)
+  // legacy single banner retained for backward compatibility only
   heroBanner: {
     badge: string;
     title: string;
@@ -66,12 +367,18 @@ interface AdminState {
   deleteProduct: (id: string) => void;
   addBrand: (brand: string) => void;
   removeBrand: (brand: string) => void;
+  updateBrandPresentation: (
+    brand: string,
+    updates: Partial<BrandPresentation>
+  ) => void;
   addCategory: (gender: "men" | "women", category: string) => void;
   removeCategory: (gender: "men" | "women", category: string) => void;
   // homepage actions
   addHeroSlide: (slide: HeroSlide) => void;
   updateHeroSlide: (slide: HeroSlide) => void;
   deleteHeroSlide: (id: string) => void;
+  updateHomepageCategory: (category: HomepageCategoryCard) => void;
+  updateFeaturedCollection: (featuredCollection: FeaturedCollectionSettings) => void;
   updatePromoBanner: (banner: PromoBanner) => void;
   updateSocialLinks: (links: SocialLinks) => void;
   // legacy (kept for compatibility but not used anymore)
@@ -115,19 +422,11 @@ export const useAdminStore = create<AdminState>()(
       isAuthenticated: false,
       products: initialAdminProducts,
       brands: initialBrandsFromProducts,
+      brandPresentations: syncBrandPresentations(initialBrandsFromProducts),
       categories: initialCategoriesFromProducts,
-      // initialize heroSlides with single default slide for previous banner
-      heroSlides: [
-        {
-          id: Date.now().toString(),
-          badge: "ELEGANCE REDEFINED",
-          title: "Women's Collection",
-          description: "Heels, flats, sneakers and more. Style that speaks volumes.",
-          buttonText: "Shop Women",
-          buttonLink: "/products?category=women",
-          image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=1600&q=80",
-        },
-      ],
+      heroSlides: HERO_DEFAULT_SLIDES.map((slide) => ({ ...slide })),
+      homepageCategories: normalizeHomepageCategories(),
+      featuredCollection: getDefaultFeaturedCollection(initialAdminProducts),
       promoBanner: {
         badge: "Limited Time Offer",
         title: "Flat 30% Off on First Order",
@@ -144,7 +443,7 @@ export const useAdminStore = create<AdminState>()(
         title: "Women's Collection",
         description: "Heels, flats, sneakers and more. Style that speaks volumes.",
         buttonText: "Shop Women",
-        buttonLink: "/products?category=women",
+        buttonLink: HERO_BUTTON_LINKS.women,
         image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=1600&q=80",
       },
 
@@ -193,7 +492,23 @@ export const useAdminStore = create<AdminState>()(
           return {
             products: newProducts,
             brands: updatedBrands,
+            brandPresentations: syncBrandPresentations(
+              updatedBrands,
+              state.brandPresentations
+            ),
             categories: updatedCategories,
+            featuredCollection: newProduct.isFeatured
+              ? normalizeFeaturedCollection(
+                  {
+                    ...state.featuredCollection,
+                    productIds: [
+                      ...state.featuredCollection.productIds,
+                      newProduct.id,
+                    ],
+                  },
+                  newProducts
+                )
+              : normalizeFeaturedCollection(state.featuredCollection, newProducts),
           };
         });
       },
@@ -224,11 +539,29 @@ export const useAdminStore = create<AdminState>()(
             men: Array.from(menTypes),
             women: Array.from(womenTypes),
           };
+          const updatedProduct = updatedProducts.find((product) => product.id === id);
+          const nextFeaturedIds =
+            updatedProduct && "isFeatured" in updates
+              ? updatedProduct.isFeatured
+                ? [...state.featuredCollection.productIds, id]
+                : state.featuredCollection.productIds.filter((productId) => productId !== id)
+              : state.featuredCollection.productIds;
 
           return {
             products: updatedProducts,
             brands: updatedBrands,
+            brandPresentations: syncBrandPresentations(
+              updatedBrands,
+              state.brandPresentations
+            ),
             categories: updatedCategories,
+            featuredCollection: normalizeFeaturedCollection(
+              {
+                ...state.featuredCollection,
+                productIds: nextFeaturedIds,
+              },
+              updatedProducts
+            ),
           };
         });
       },
@@ -260,7 +593,20 @@ export const useAdminStore = create<AdminState>()(
           return {
             products: remainingProducts,
             brands: remainingBrands,
+            brandPresentations: syncBrandPresentations(
+              remainingBrands,
+              state.brandPresentations
+            ),
             categories: remainingCategories,
+            featuredCollection: normalizeFeaturedCollection(
+              {
+                ...state.featuredCollection,
+                productIds: state.featuredCollection.productIds.filter(
+                  (productId) => productId !== id
+                ),
+              },
+              remainingProducts
+            ),
           };
         });
       },
@@ -268,7 +614,14 @@ export const useAdminStore = create<AdminState>()(
       addBrand: (brand: string) => {
         const state = get();
         if (!state.brands.includes(brand)) {
-          set({ brands: [...state.brands, brand] });
+          const nextBrands = [...state.brands, brand];
+          set({
+            brands: nextBrands,
+            brandPresentations: syncBrandPresentations(
+              nextBrands,
+              state.brandPresentations
+            ),
+          });
         }
       },
 
@@ -300,9 +653,25 @@ export const useAdminStore = create<AdminState>()(
           return {
             products: remainingProducts,
             brands: remainingBrands,
+            brandPresentations: syncBrandPresentations(
+              remainingBrands,
+              state.brandPresentations
+            ),
             categories: remainingCategories,
           };
         });
+      },
+
+      updateBrandPresentation: (brand, updates) => {
+        set((state) => ({
+          brandPresentations: {
+            ...state.brandPresentations,
+            [brand]: normalizeBrandPresentation(brand, {
+              ...state.brandPresentations[brand],
+              ...updates,
+            }),
+          },
+        }));
       },
 
       addCategory: (gender: "men" | "women", category: string) => {
@@ -328,16 +697,36 @@ export const useAdminStore = create<AdminState>()(
 
       // homepage actions
       addHeroSlide: (slide) => {
-        set((state) => ({ heroSlides: [...state.heroSlides, slide] }));
+        set((state) => ({
+          heroSlides: [...state.heroSlides, normalizeHeroSlide(slide, slide.section)],
+        }));
       },
       updateHeroSlide: (slide) => {
         set((state) => ({
-          heroSlides: state.heroSlides.map((s) => (s.id === slide.id ? slide : s)),
+          heroSlides: state.heroSlides.map((s) =>
+            s.id === slide.id ? normalizeHeroSlide(slide, s.section) : s
+          ),
         }));
       },
       deleteHeroSlide: (id) => {
         set((state) => ({
           heroSlides: state.heroSlides.filter((s) => s.id !== id),
+        }));
+      },
+      updateHomepageCategory: (category) => {
+        set((state) => ({
+          homepageCategories: {
+            ...state.homepageCategories,
+            [category.section]: normalizeHomepageCategoryCard(category, category.section),
+          },
+        }));
+      },
+      updateFeaturedCollection: (featuredCollection) => {
+        set((state) => ({
+          featuredCollection: normalizeFeaturedCollection(
+            featuredCollection,
+            state.products
+          ),
         }));
       },
       updatePromoBanner: (banner) => {
@@ -347,7 +736,7 @@ export const useAdminStore = create<AdminState>()(
         set({ socialLinks: links });
       },
       updateHeroBanner: (banner) => {
-        // keep for legacy compatibility, no-op or copy to slides
+        // legacy-only state retained for backward compatibility
         set({ heroBanner: banner });
       },
     }),
@@ -357,13 +746,46 @@ export const useAdminStore = create<AdminState>()(
         isAuthenticated: state.isAuthenticated,
         products: state.products,
         brands: state.brands,
+        brandPresentations: state.brandPresentations,
         categories: state.categories,
         heroSlides: state.heroSlides,
+        homepageCategories: state.homepageCategories,
+        featuredCollection: state.featuredCollection,
         promoBanner: state.promoBanner,
         socialLinks: state.socialLinks,
-        // keep heroBanner for backward migration
-        heroBanner: state.heroBanner,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AdminState> | undefined;
+        const mergedBrands = persisted?.brands ?? currentState.brands;
+        const mergedProducts = persisted?.products ?? currentState.products;
+
+        return {
+          ...currentState,
+          ...persisted,
+          products: mergedProducts,
+          brands: mergedBrands,
+          brandPresentations: syncBrandPresentations(
+            mergedBrands,
+            persisted?.brandPresentations as
+              | Record<string, PersistedBrandPresentation>
+              | undefined
+          ),
+          heroSlides: normalizeHeroSlides(
+            persisted?.heroSlides as PersistedHeroSlide[] | undefined
+          ),
+          homepageCategories: normalizeHomepageCategories(
+            persisted?.homepageCategories as
+              | Partial<Record<HeroSection, PersistedHomepageCategoryCard>>
+              | PersistedHomepageCategoryCard[]
+              | undefined
+          ),
+          featuredCollection: normalizeFeaturedCollection(
+            persisted?.featuredCollection as Partial<FeaturedCollectionSettings> | undefined,
+            mergedProducts
+          ),
+          heroBanner: currentState.heroBanner,
+        };
+      },
     }
   )
 );
