@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/lib/products";
 import { saveBrandsToFirebase } from "@/lib/firebase/brands";
+import { saveProducts } from "@/lib/firebase/products";
 
 // re-export so components can still import from this module
 export type { Product };
@@ -126,6 +127,11 @@ const FEATURED_COLLECTION_COPY_DEFAULTS = {
   title: "Featured Collection",
   description:
     "Handpicked styles that are trending right now. Premium quality at unbeatable prices.",
+};
+
+const NEW_ARRIVALS_COPY_DEFAULTS = {
+  title: "New Arrivals",
+  description: "Be the first to discover our latest additions. Fresh styles just landed.",
 };
 
 const DEFAULT_BRAND_PRESENTATIONS: Record<string, Partial<BrandPresentation>> = {
@@ -320,6 +326,13 @@ const getDefaultFeaturedCollection = (
   productIds: products.filter((product) => product.isFeatured).map((product) => product.id),
 });
 
+const getDefaultNewArrivalsCollection = (
+  products: AdminProduct[]
+): FeaturedCollectionSettings => ({
+  ...NEW_ARRIVALS_COPY_DEFAULTS,
+  productIds: products.filter((product) => product.isNew).map((product) => product.id),
+});
+
 const normalizeFeaturedCollection = (
   featuredCollection: Partial<FeaturedCollectionSettings> | undefined,
   products: AdminProduct[]
@@ -340,6 +353,26 @@ const normalizeFeaturedCollection = (
   };
 };
 
+const normalizeNewArrivalsCollection = (
+  newArrivalsCollection: Partial<FeaturedCollectionSettings> | undefined,
+  products: AdminProduct[]
+): FeaturedCollectionSettings => {
+  const defaults = getDefaultNewArrivalsCollection(products);
+  const validProductIds = new Set(products.map((product) => product.id));
+  const normalizedProductIds = Array.isArray(newArrivalsCollection?.productIds)
+    ? newArrivalsCollection.productIds.filter(
+        (productId, index, productIds) =>
+          validProductIds.has(productId) && productIds.indexOf(productId) === index
+      )
+    : defaults.productIds;
+
+  return {
+    title: newArrivalsCollection?.title ?? defaults.title,
+    description: newArrivalsCollection?.description ?? defaults.description,
+    productIds: normalizedProductIds,
+  };
+};
+
 interface AdminState {
   isAuthenticated: boolean;
   products: AdminProduct[];
@@ -350,6 +383,7 @@ interface AdminState {
   heroSlides: HeroSlide[];
   homepageCategories: Record<HeroSection, HomepageCategoryCard>;
   featuredCollection: FeaturedCollectionSettings;
+  newArrivalsCollection: FeaturedCollectionSettings;
   promoBanner: PromoBanner;
   socialLinks: SocialLinks;
   // legacy single banner retained for backward compatibility only
@@ -366,6 +400,7 @@ interface AdminState {
   addProduct: (product: AdminProduct) => void;
   updateProduct: (id: string, updates: Partial<AdminProduct>) => void;
   deleteProduct: (id: string) => void;
+  setProductsFromRemote: (products: AdminProduct[]) => void;
   addBrand: (brand: string) => void;
   removeBrand: (brand: string) => void;
   updateBrandPresentation: (
@@ -390,6 +425,10 @@ interface AdminState {
   updateFeaturedCollection: (featuredCollection: FeaturedCollectionSettings) => void;
   setFeaturedCollectionFromRemote: (
     featuredCollection: Partial<FeaturedCollectionSettings>
+  ) => void;
+  updateNewArrivalsCollection: (newArrivalsCollection: FeaturedCollectionSettings) => void;
+  setNewArrivalsCollectionFromRemote: (
+    newArrivalsCollection: Partial<FeaturedCollectionSettings>
   ) => void;
   updatePromoBanner: (banner: PromoBanner) => void;
   setPromoBannerFromRemote: (banner: PromoBanner) => void;
@@ -440,6 +479,7 @@ export const useAdminStore = create<AdminState>()(
       heroSlides: HERO_DEFAULT_SLIDES.map((slide) => ({ ...slide })),
       homepageCategories: normalizeHomepageCategories(),
       featuredCollection: getDefaultFeaturedCollection(initialAdminProducts),
+      newArrivalsCollection: getDefaultNewArrivalsCollection(initialAdminProducts),
       promoBanner: {
         badge: "Limited Time Offer",
         title: "Flat 30% Off on First Order",
@@ -476,6 +516,7 @@ export const useAdminStore = create<AdminState>()(
       },
 
       addProduct: (product: AdminProduct) => {
+        let updatedProducts: AdminProduct[] = [];
         set((state) => {
           // ensure inStock mirrors stock
           const newProduct = {
@@ -483,6 +524,7 @@ export const useAdminStore = create<AdminState>()(
             inStock: product.stock > 0,
           };
           const newProducts = [...state.products, newProduct];
+          updatedProducts = newProducts;
 
           const brandSet = new Set<string>();
           newProducts.forEach(p => brandSet.add(p.brand));
@@ -524,11 +566,15 @@ export const useAdminStore = create<AdminState>()(
               : normalizeFeaturedCollection(state.featuredCollection, newProducts),
           };
         });
+        void saveProducts(updatedProducts).catch((error) => {
+          console.error("Failed to save products to Firebase:", error);
+        });
       },
 
       updateProduct: (id: string, updates: Partial<AdminProduct>) => {
+        let updatedProducts: AdminProduct[] = [];
         set((state) => {
-          const updatedProducts = state.products.map((p) => {
+          updatedProducts = state.products.map((p) => {
             if (p.id !== id) return p;
             const merged = { ...p, ...updates };
             // always sync availability based on final stock value
@@ -555,10 +601,18 @@ export const useAdminStore = create<AdminState>()(
           const updatedProduct = updatedProducts.find((product) => product.id === id);
           const nextFeaturedIds =
             updatedProduct && "isFeatured" in updates
-              ? updatedProduct.isFeatured
-                ? [...state.featuredCollection.productIds, id]
-                : state.featuredCollection.productIds.filter((productId) => productId !== id)
+              ? updatedProduct.isFeatured === false
+                ? state.featuredCollection.productIds.filter((productId) => productId !== id)
+                : state.featuredCollection.productIds
               : state.featuredCollection.productIds;
+          const nextNewArrivalsIds =
+            updatedProduct && "isNew" in updates
+              ? updatedProduct.isNew === false
+                ? state.newArrivalsCollection.productIds.filter(
+                    (productId) => productId !== id
+                  )
+                : state.newArrivalsCollection.productIds
+              : state.newArrivalsCollection.productIds;
 
           return {
             products: updatedProducts,
@@ -575,13 +629,25 @@ export const useAdminStore = create<AdminState>()(
               },
               updatedProducts
             ),
+            newArrivalsCollection: normalizeNewArrivalsCollection(
+              {
+                ...state.newArrivalsCollection,
+                productIds: nextNewArrivalsIds,
+              },
+              updatedProducts
+            ),
           };
+        });
+        void saveProducts(updatedProducts).catch((error) => {
+          console.error("Failed to save products to Firebase:", error);
         });
       },
 
       deleteProduct: (id: string) => {
+        let updatedProducts: AdminProduct[] = [];
         set((state) => {
           const remainingProducts = state.products.filter((p) => p.id !== id);
+          updatedProducts = remainingProducts;
 
           // Recalculate brands from remaining products
           const brandSet = new Set<string>();
@@ -620,7 +686,19 @@ export const useAdminStore = create<AdminState>()(
               },
               remainingProducts
             ),
+            newArrivalsCollection: normalizeNewArrivalsCollection(
+              {
+                ...state.newArrivalsCollection,
+                productIds: state.newArrivalsCollection.productIds.filter(
+                  (productId) => productId !== id
+                ),
+              },
+              remainingProducts
+            ),
           };
+        });
+        void saveProducts(updatedProducts).catch((error) => {
+          console.error("Failed to save products to Firebase:", error);
         });
       },
 
@@ -678,6 +756,47 @@ export const useAdminStore = create<AdminState>()(
         });
         void saveBrandsToFirebase(get().brands, get().brandPresentations).catch((error) => {
           console.error("Failed to save brands to Firebase:", error);
+        });
+      },
+
+      setProductsFromRemote: (products) => {
+        set((state) => {
+          const brandSet = new Set<string>();
+          const menTypes = new Set<string>();
+          const womenTypes = new Set<string>();
+
+          products.forEach((product) => {
+            brandSet.add(product.brand);
+            if (product.category === "men") {
+              menTypes.add(product.type);
+            } else if (product.category === "women") {
+              womenTypes.add(product.type);
+            }
+          });
+
+          const updatedBrands = Array.from(brandSet);
+          const updatedCategories = {
+            men: Array.from(menTypes),
+            women: Array.from(womenTypes),
+          };
+
+          return {
+            products,
+            brands: updatedBrands,
+            brandPresentations: syncBrandPresentations(
+              updatedBrands,
+              state.brandPresentations
+            ),
+            categories: updatedCategories,
+            featuredCollection: normalizeFeaturedCollection(
+              state.featuredCollection,
+              products
+            ),
+            newArrivalsCollection: normalizeNewArrivalsCollection(
+              state.newArrivalsCollection,
+              products
+            ),
+          };
         });
       },
 
@@ -775,6 +894,22 @@ export const useAdminStore = create<AdminState>()(
           ),
         }));
       },
+      updateNewArrivalsCollection: (newArrivalsCollection) => {
+        set((state) => ({
+          newArrivalsCollection: normalizeNewArrivalsCollection(
+            newArrivalsCollection,
+            state.products
+          ),
+        }));
+      },
+      setNewArrivalsCollectionFromRemote: (newArrivalsCollection) => {
+        set((state) => ({
+          newArrivalsCollection: normalizeNewArrivalsCollection(
+            newArrivalsCollection,
+            state.products
+          ),
+        }));
+      },
       updatePromoBanner: (banner) => {
         set({ promoBanner: banner });
       },
@@ -800,6 +935,7 @@ export const useAdminStore = create<AdminState>()(
         heroSlides: state.heroSlides,
         homepageCategories: state.homepageCategories,
         featuredCollection: state.featuredCollection,
+        newArrivalsCollection: state.newArrivalsCollection,
         promoBanner: state.promoBanner,
         socialLinks: state.socialLinks,
       }),
@@ -830,6 +966,12 @@ export const useAdminStore = create<AdminState>()(
           ),
           featuredCollection: normalizeFeaturedCollection(
             persisted?.featuredCollection as Partial<FeaturedCollectionSettings> | undefined,
+            mergedProducts
+          ),
+          newArrivalsCollection: normalizeNewArrivalsCollection(
+            persisted?.newArrivalsCollection as
+              | Partial<FeaturedCollectionSettings>
+              | undefined,
             mergedProducts
           ),
           heroBanner: currentState.heroBanner,

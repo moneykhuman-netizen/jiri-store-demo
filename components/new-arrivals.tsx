@@ -1,14 +1,36 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { useAdminStore } from "@/lib/admin-store";
+import { type AdminProduct, useAdminStore } from "@/lib/admin-store";
+import { subscribeNewArrivalsCollectionFromFirebase } from "@/lib/firebase/new-arrivals";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
 export function NewArrivals() {
   const products = useAdminStore((state) => state.products);
-  const newProducts = products.filter((product) => product.isNew);
+  const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
+  const setNewArrivalsCollectionFromRemote = useAdminStore(
+    (state) => state.setNewArrivalsCollectionFromRemote
+  );
+
+  useEffect(() => {
+    const unsubscribe = subscribeNewArrivalsCollectionFromFirebase(
+      (remoteNewArrivalsCollection) => {
+        if (remoteNewArrivalsCollection) {
+          setNewArrivalsCollectionFromRemote(remoteNewArrivalsCollection);
+        }
+      }
+    );
+
+    return unsubscribe;
+  }, [setNewArrivalsCollectionFromRemote]);
+
+  const productMap = new Map(products.map((product) => [product.id, product] as const));
+  const newProducts = newArrivalsCollection.productIds
+    .map((productId) => productMap.get(productId))
+    .filter((product): product is AdminProduct => Boolean(product));
 
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-background">
@@ -16,10 +38,10 @@ export function NewArrivals() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
           <div>
             <h2 className="text-2xl md:text-3xl lg:text-4xl font-serif font-bold text-foreground">
-              New Arrivals
+              {newArrivalsCollection.title}
             </h2>
             <p className="text-muted-foreground max-w-xl">
-              Be the first to discover our latest additions. Fresh styles just landed.
+              {newArrivalsCollection.description}
             </p>
           </div>
 

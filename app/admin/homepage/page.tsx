@@ -17,6 +17,7 @@ import {
 import { saveHomepageCategoriesToFirebase } from "@/lib/firebase/categories";
 import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
 import { saveHeroSlidesToFirebase } from "@/lib/firebase/hero";
+import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
 import { savePromoBannerToFirebase } from "@/lib/firebase/promo";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +60,8 @@ export default function HomepageSettingsPage() {
   const products = useAdminStore((s) => s.products);
   const featuredCollection = useAdminStore((s) => s.featuredCollection);
   const updateFeaturedCollection = useAdminStore((s) => s.updateFeaturedCollection);
+  const newArrivalsCollection = useAdminStore((s) => s.newArrivalsCollection);
+  const updateNewArrivalsCollection = useAdminStore((s) => s.updateNewArrivalsCollection);
   const promo = useAdminStore((s) => s.promoBanner);
   const updatePromo = useAdminStore((s) => s.updatePromoBanner);
   const social = useAdminStore((s) => s.socialLinks);
@@ -74,6 +77,9 @@ export default function HomepageSettingsPage() {
   const [featuredForm, setFeaturedForm] = useState<FeaturedCollectionSettings>(
     featuredCollection
   );
+  const [newArrivalsForm, setNewArrivalsForm] = useState<FeaturedCollectionSettings>(
+    newArrivalsCollection
+  );
   const [promoForm, setPromoForm] = useState<PromoBanner>(promo);
   const [socialForm, setSocialForm] = useState<SocialLinks>(social);
   const availableProductIds = new Set(products.map((product) => product.id));
@@ -85,6 +91,10 @@ export default function HomepageSettingsPage() {
   useEffect(() => {
     setFeaturedForm(featuredCollection);
   }, [featuredCollection]);
+
+  useEffect(() => {
+    setNewArrivalsForm(newArrivalsCollection);
+  }, [newArrivalsCollection]);
 
   const resetSlideForm = (section: HeroSection = slideForm.section) => {
     setSlideForm(createEmptySlide(section));
@@ -200,12 +210,42 @@ export default function HomepageSettingsPage() {
     updateSocial(socialForm);
   };
 
+  const handleNewArrivalsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    updateNewArrivalsCollection({
+      ...newArrivalsForm,
+      title: newArrivalsForm.title.trim(),
+      description: newArrivalsForm.description.trim(),
+      productIds: newArrivalsForm.productIds.filter(
+        (productId, index, productIds) =>
+          availableProductIds.has(productId) && productIds.indexOf(productId) === index
+      ),
+    });
+
+    const latestNewArrivalsCollection = useAdminStore.getState().newArrivalsCollection;
+
+    void (async () => {
+      try {
+        await saveNewArrivalsCollectionToFirebase(latestNewArrivalsCollection);
+      } catch (error) {
+        console.error("Failed to save new arrivals collection to Firebase:", error);
+      }
+    })();
+  };
+
   const validFeaturedProductIds = featuredForm.productIds.filter(
     (productId, index, productIds) =>
       availableProductIds.has(productId) &&
       productIds.indexOf(productId) === index
   );
   const selectedFeaturedIds = new Set(validFeaturedProductIds);
+  const validNewArrivalsProductIds = newArrivalsForm.productIds.filter(
+    (productId, index, productIds) =>
+      availableProductIds.has(productId) &&
+      productIds.indexOf(productId) === index
+  );
+  const selectedNewArrivalsIds = new Set(validNewArrivalsProductIds);
 
   return (
     <div className="space-y-6">
@@ -226,6 +266,7 @@ export default function HomepageSettingsPage() {
           <TabsTrigger value="hero">Hero Slides</TabsTrigger>
           <TabsTrigger value="categories">Category Cards</TabsTrigger>
           <TabsTrigger value="featured">Featured</TabsTrigger>
+          <TabsTrigger value="new-arrivals">New Arrivals</TabsTrigger>
           <TabsTrigger value="promo">Promo Banner</TabsTrigger>
           <TabsTrigger value="social">Social Links</TabsTrigger>
         </TabsList>
@@ -575,6 +616,113 @@ export default function HomepageSettingsPage() {
             <div className="flex justify-end gap-3">
               <Button type="submit">
                 <Save className="mr-2 h-4 w-4" /> Save Featured Collection
+              </Button>
+            </div>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="new-arrivals">
+          <form onSubmit={handleNewArrivalsSubmit} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>New Arrivals</CardTitle>
+                <CardDescription>
+                  Choose which products appear on the homepage new arrivals grid. Product cards and
+                  the View All link stay unchanged.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Section Title"
+                    value={newArrivalsForm.title}
+                    onChange={(e) =>
+                      setNewArrivalsForm((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <Textarea
+                    placeholder="Section Description"
+                    rows={2}
+                    value={newArrivalsForm.description}
+                    onChange={(e) =>
+                      setNewArrivalsForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <p className="text-sm text-muted-foreground">
+                    Selected products: {validNewArrivalsProductIds.length}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold">Choose Products</p>
+                    <p className="text-sm text-muted-foreground">
+                      Selected products are saved in the admin store and shown in the same product
+                      card layout on the homepage.
+                    </p>
+                  </div>
+
+                  {products.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No products available yet.</p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {products.map((product) => {
+                        const checkboxId = `new-arrivals-product-${product.id}`;
+                        const isChecked = selectedNewArrivalsIds.has(product.id);
+
+                        return (
+                          <div
+                            key={product.id}
+                            className="flex items-start gap-3 rounded-lg border border-border p-4"
+                          >
+                            <Checkbox
+                              id={checkboxId}
+                              checked={isChecked}
+                              onCheckedChange={(checked) =>
+                                setNewArrivalsForm((prev) => ({
+                                  ...prev,
+                                  productIds:
+                                    checked === true
+                                      ? prev.productIds.includes(product.id)
+                                        ? prev.productIds
+                                        : [...prev.productIds, product.id]
+                                      : prev.productIds.filter(
+                                          (productId) => productId !== product.id
+                                        ),
+                                }))
+                              }
+                            />
+                            <Label
+                              htmlFor={checkboxId}
+                              className="flex-1 cursor-pointer flex-col items-start gap-1"
+                            >
+                              <span className="text-sm font-medium leading-none">
+                                {product.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {product.brand} | {product.category} | Rs. {product.price}
+                              </span>
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-3">
+              <Button type="submit">
+                <Save className="mr-2 h-4 w-4" /> Save New Arrivals
               </Button>
             </div>
           </form>
