@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useAdminStore } from "@/lib/admin-store";
-import { sizes } from "@/lib/products";
+import { getProductSizeNumbers } from "@/lib/product-inventory";
 import { SlidersHorizontal } from "lucide-react";
 import {
   Sheet,
@@ -33,6 +33,7 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
   const searchParams = useSearchParams();
   const brands = useAdminStore((state) => state.brands);
   const categories = useAdminStore((state) => state.categories);
+  const products = useAdminStore((state) => state.products);
   
   const selectedBrand = searchParams.get("brand");
   const selectedType = searchParams.get("type");
@@ -66,6 +67,13 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
   };
 
   const availableTypes = [...new Set(currentCategory ? categories[currentCategory] : [...categories.men, ...categories.women])];
+  const availableSizes = Array.from(
+    new Set(
+      products
+        .filter((product) => !currentCategory || product.category === currentCategory)
+        .flatMap((product) => getProductSizeNumbers(product))
+    )
+  ).sort((a, b) => a - b);
 
   return (
     <div className="bg-card rounded-lg border border-border p-6">
@@ -137,12 +145,12 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
         {/* Sizes */}
         <AccordionItem value="sizes">
           <AccordionTrigger className="text-sm font-medium">Sizes</AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-3 max-h-48 overflow-y-auto">
-              {[...new Set(currentCategory ? sizes[currentCategory] : [...sizes.men, ...sizes.women])].sort((a, b) => a - b).map((size) => (
-                <div key={`size-${size}`} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`size-${size}`}
+              <AccordionContent>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {availableSizes.map((size) => (
+                    <div key={`size-${size}`} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`size-${size}`}
                     checked={selectedSize === size.toString()}
                     onCheckedChange={(checked) =>
                       updateFilters("size", checked ? size.toString() : null)
@@ -261,7 +269,7 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
                 <AccordionTrigger className="text-sm font-medium">Sizes</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {[...new Set(currentCategory ? sizes[currentCategory] : [...sizes.men, ...sizes.women])].sort((a, b) => a - b).map((size) => (
+                    {availableSizes.map((size) => (
                       <div key={`mobile-size-${size}`} className="flex items-center space-x-2">
                         <Checkbox
                           id={`mobile-size-${size}`}

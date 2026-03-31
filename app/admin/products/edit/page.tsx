@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Search, Edit, X, Save, Package } from "lucide-react";
 import Link from "next/link";
+import { QUICK_SELECT_SIZES, getTotalSizeStock, type ProductSizeStock } from "@/lib/product-inventory";
 
 export default function EditProductPage() {
   const products = useAdminStore((state) => state.products);
@@ -21,21 +22,37 @@ export default function EditProductPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
   const [formData, setFormData] = useState<Partial<AdminProduct>>({});
+  const [newSize, setNewSize] = useState("");
+  const [newSizeStock, setNewSizeStock] = useState("1");
+  const [newColor, setNewColor] = useState("");
 
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.brand.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const currentSizeInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
+  const currentColors = formData.colors ?? editingProduct?.colors ?? [];
 
   const openEditDialog = (product: AdminProduct) => {
     setEditingProduct(product);
-    setFormData({ ...product });
+    setFormData({
+      ...product,
+      sizes: [...product.sizes],
+      sizeInventory: product.sizeInventory.map((entry) => ({ ...entry })),
+      colors: [...product.colors],
+    });
+    setNewSize("");
+    setNewSizeStock("1");
+    setNewColor("");
   };
 
   const closeEditDialog = () => {
     setEditingProduct(null);
     setFormData({});
+    setNewSize("");
+    setNewSizeStock("1");
+    setNewColor("");
   };
 
   const handleSave = () => {
@@ -44,14 +61,112 @@ export default function EditProductPage() {
       const price = formData.price || 0;
       const originalPrice = formData.originalPrice || price;
       const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+      const sizeInventory = formData.sizeInventory ?? editingProduct.sizeInventory;
+      const stock =
+        formData.sizeInventory !== undefined
+          ? getTotalSizeStock(sizeInventory)
+          : formData.stock ?? editingProduct.stock;
+      const inStock = sizeInventory.some((entry) => entry.stock > 0);
 
-      // ensure stock/inStock values are explicit
-      const stock = formData.stock ?? editingProduct.stock;
-      const inStock = stock > 0;
-
-      updateProduct(editingProduct.id, { ...formData, discount, stock, inStock });
+      updateProduct(editingProduct.id, {
+        ...formData,
+        discount,
+        sizes: sizeInventory.map((entry) => entry.size),
+        sizeInventory,
+        colors: formData.colors ?? editingProduct.colors,
+        stock,
+        inStock,
+      });
       closeEditDialog();
     }
+  };
+
+  const syncSizeInventory = (sizeInventory: ProductSizeStock[]) => {
+    const normalizedInventory = [...sizeInventory].sort((a, b) => a.size - b.size);
+
+    setFormData((prev) => ({
+      ...prev,
+      sizes: normalizedInventory.map((entry) => entry.size),
+      sizeInventory: normalizedInventory,
+      stock: getTotalSizeStock(normalizedInventory),
+      inStock: normalizedInventory.some((entry) => entry.stock > 0),
+    }));
+  };
+
+  const updateSizeStock = (size: number, stockValue: string) => {
+    const parsedStock = parseInt(stockValue, 10);
+    const normalizedStock = Number.isFinite(parsedStock) ? Math.max(0, parsedStock) : 0;
+    const currentInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
+
+    syncSizeInventory(
+      currentInventory.map((entry) =>
+        entry.size === size ? { ...entry, stock: normalizedStock } : entry
+      )
+    );
+  };
+
+  const removeSize = (size: number) => {
+    const currentInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
+    syncSizeInventory(currentInventory.filter((entry) => entry.size !== size));
+  };
+
+  const addSize = () => {
+    const parsedSize = parseInt(newSize, 10);
+    if (!Number.isFinite(parsedSize) || parsedSize < 1) {
+      return;
+    }
+
+    const parsedStock = parseInt(newSizeStock, 10);
+    const currentInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
+    if (currentInventory.some((entry) => entry.size === parsedSize)) {
+      return;
+    }
+
+    syncSizeInventory([
+      ...currentInventory,
+      {
+        size: parsedSize,
+        stock: Number.isFinite(parsedStock) ? Math.max(0, parsedStock) : 1,
+      },
+    ]);
+    setNewSize("");
+    setNewSizeStock("1");
+  };
+
+  const addColor = () => {
+    const trimmedColor = newColor.trim();
+    if (!trimmedColor) {
+      return;
+    }
+
+    const currentColors = formData.colors ?? editingProduct?.colors ?? [];
+    if (currentColors.some((color) => color.toLowerCase() === trimmedColor.toLowerCase())) {
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      colors: [...(prev.colors ?? editingProduct?.colors ?? []), trimmedColor],
+    }));
+    setNewColor("");
+  };
+
+  const updateColor = (index: number, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      colors: (prev.colors ?? editingProduct?.colors ?? []).map((color, colorIndex) =>
+        colorIndex === index ? value : color
+      ),
+    }));
+  };
+
+  const removeColor = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      colors: (prev.colors ?? editingProduct?.colors ?? []).filter(
+        (_, colorIndex) => colorIndex !== index
+      ),
+    }));
   };
 
   return (
@@ -235,6 +350,113 @@ export default function EditProductPage() {
                     value={formData.stock || ""}
                     onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Editing total stock keeps the legacy flow working. Per-size stock below controls actual availability.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Per-Size Stock</Label>
+                  <span className="text-xs text-muted-foreground">
+                    Quick sizes: {QUICK_SELECT_SIZES.join(", ")}
+                  </span>
+                </div>
+
+                {currentSizeInventory.length > 0 ? (
+                  <div className="space-y-2">
+                    {currentSizeInventory.map((entry) => (
+                      <div
+                        key={`size-stock-${entry.size}`}
+                        className="flex items-center gap-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="min-w-20 text-sm font-medium">UK {entry.size}</div>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={entry.stock}
+                          onChange={(e) => updateSizeStock(entry.size, e.target.value)}
+                          className="w-28"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeSize(entry.size)}
+                          className="ml-auto"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No sizes configured yet. Add one below to start tracking stock by size.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="Add size"
+                    value={newSize}
+                    onChange={(e) => setNewSize(e.target.value)}
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Stock"
+                    value={newSizeStock}
+                    onChange={(e) => setNewSizeStock(e.target.value)}
+                  />
+                  <Button type="button" variant="outline" onClick={addSize}>
+                    Add Size
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Colors</Label>
+                {currentColors.length > 0 && (
+                  <div className="space-y-2">
+                    {currentColors.map((color, index) => (
+                      <div key={`edit-color-${index}`} className="flex gap-2">
+                        <Input
+                          value={color}
+                          onChange={(e) => updateColor(index, e.target.value)}
+                          placeholder={`Color ${index + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeColor(index)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add custom color"
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addColor();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addColor}>
+                    Add Color
+                  </Button>
                 </div>
               </div>
 

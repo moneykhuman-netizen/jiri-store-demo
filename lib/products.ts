@@ -1,3 +1,8 @@
+import type { ProductSizeStock } from "@/lib/product-inventory";
+import { QUICK_SELECT_SIZES, getProductSizeNumbers } from "@/lib/product-inventory";
+
+export type ProductSizeInput = number | string | ProductSizeStock;
+
 export interface Product {
   id: string;
   name: string;
@@ -9,7 +14,8 @@ export interface Product {
   discount: number;
   rating: number;
   reviews: number;
-  sizes: number[];
+  sizes: ProductSizeInput[];
+  sizeInventory?: ProductSizeStock[];
   colors: string[];
   images: string[];
   description: string;
@@ -47,8 +53,8 @@ export const types = {
 };
 
 export const sizes = {
-  men: [6, 7, 8, 9, 10, 11, 12],
-  women: [4, 5, 6, 7, 8, 9],
+  men: [...QUICK_SELECT_SIZES],
+  women: [...QUICK_SELECT_SIZES],
 };
 
 export const products: Product[] = [
@@ -500,7 +506,7 @@ export function filterProducts(
     if (type && p.type !== type) return false;
     if (minPrice && p.price < minPrice) return false;
     if (maxPrice && p.price > maxPrice) return false;
-    if (size && !p.sizes.includes(size)) return false;
+    if (size && !getProductSizeNumbers(p).includes(size)) return false;
     return true;
   });
 }

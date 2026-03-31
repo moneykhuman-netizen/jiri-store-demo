@@ -12,11 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Plus, X, Save } from "lucide-react";
 import Link from "next/link";
-
-const sizeOptions = {
-  men: [6, 7, 8, 9, 10, 11, 12],
-  women: [4, 5, 6, 7, 8, 9],
-};
+import { QUICK_SELECT_SIZES } from "@/lib/product-inventory";
 
 const colorOptions = [
   "Black",
@@ -52,6 +48,7 @@ export default function AddProductPage() {
 
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [customColor, setCustomColor] = useState("");
   const [features, setFeatures] = useState<string[]>([""]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isNew, setIsNew] = useState(true);
@@ -66,6 +63,7 @@ export default function AddProductPage() {
     const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
     const stockVal = parseInt(formData.stock) || 0;
+    const normalizedSelectedSizes = [...new Set(selectedSizes)].sort((a, b) => a - b);
     const newProduct: AdminProduct = {
       id: `p${Date.now()}`,
       name: formData.name,
@@ -77,8 +75,9 @@ export default function AddProductPage() {
       discount,
       rating: 4.0,
       reviews: 0,
-      sizes: selectedSizes,
-      colors: selectedColors,
+      sizes: normalizedSelectedSizes,
+      sizeInventory: normalizedSelectedSizes.map((size) => ({ size, stock: 1 })),
+      colors: selectedColors.map((color) => color.trim()).filter(Boolean),
       images: formData.imageUrl ? [formData.imageUrl] : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80"],
       description: formData.description,
       features: features.filter((f) => f.trim() !== ""),
@@ -120,7 +119,33 @@ export default function AddProductPage() {
     );
   };
 
-  const availableSizes = formData.category ? sizeOptions[formData.category] : [];
+  const addCustomColor = () => {
+    const trimmedColor = customColor.trim();
+    if (!trimmedColor) {
+      return;
+    }
+
+    setSelectedColors((prev) => {
+      if (prev.some((color) => color.toLowerCase() === trimmedColor.toLowerCase())) {
+        return prev;
+      }
+
+      return [...prev, trimmedColor];
+    });
+    setCustomColor("");
+  };
+
+  const updateColor = (index: number, value: string) => {
+    setSelectedColors((prev) =>
+      prev.map((color, colorIndex) => (colorIndex === index ? value : color))
+    );
+  };
+
+  const removeColor = (index: number) => {
+    setSelectedColors((prev) => prev.filter((_, colorIndex) => colorIndex !== index));
+  };
+
+  const availableSizes = QUICK_SELECT_SIZES;
   const availableTypes = formData.category ? categories[formData.category] : [];
 
   return (
@@ -291,21 +316,26 @@ export default function AddProductPage() {
             <div className="space-y-3">
               <Label>Available Sizes (UK)</Label>
               {formData.category ? (
-                <div className="flex flex-wrap gap-2">
-                  {availableSizes.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => toggleSize(size)}
-                      className={`w-12 h-12 rounded-lg border-2 font-medium transition-colors ${
-                        selectedSizes.includes(size)
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {availableSizes.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => toggleSize(size)}
+                        className={`w-12 h-12 rounded-lg border-2 font-medium transition-colors ${
+                          selectedSizes.includes(size)
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selected sizes start with stock 1 each. You can edit per-size stock later from Edit Product.
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Select a category first</p>
@@ -314,21 +344,62 @@ export default function AddProductPage() {
 
             <div className="space-y-3">
               <Label>Available Colors</Label>
-              <div className="flex flex-wrap gap-2">
-                {colorOptions.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => toggleColor(color)}
-                    className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
-                      selectedColors.includes(color)
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    {color}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {colorOptions.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => toggleColor(color)}
+                      className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                        selectedColors.includes(color)
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedColors.length > 0 && (
+                  <div className="space-y-2">
+                    {selectedColors.map((color, index) => (
+                      <div key={`${color}-${index}`} className="flex gap-2">
+                        <Input
+                          value={color}
+                          onChange={(e) => updateColor(index, e.target.value)}
+                          placeholder={`Color ${index + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeColor(index)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add custom color"
+                    value={customColor}
+                    onChange={(e) => setCustomColor(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomColor();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addCustomColor}>
+                    Add Color
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>

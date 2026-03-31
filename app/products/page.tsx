@@ -9,11 +9,12 @@ import { ProductFilters } from "@/components/product-filters";
 import { useAdminStore } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { getProductSizeNumbers } from "@/lib/product-inventory";
 import Link from "next/link";
 
 function ProductsContent() {
   const searchParams = useSearchParams();
-  const products = useAdminStore((state) => state.products);
+  const allProducts = useAdminStore((state) => state.products);
   
   const category = searchParams.get("category")?.toLowerCase() || null;
   const brand = searchParams.get("brand");
@@ -24,20 +25,19 @@ function ProductsContent() {
   const search = searchParams.get("search");
 
   const filteredProducts = useMemo(() => {
+    // Always start from the full products backbone, then apply page filters.
     let result = search
-      ? products.filter((p) =>
+      ? allProducts.filter((p) =>
           p.name.toLowerCase().includes(search.toLowerCase()) ||
           p.brand.toLowerCase().includes(search.toLowerCase()) ||
           p.type.toLowerCase().includes(search.toLowerCase()) ||
           p.description.toLowerCase().includes(search.toLowerCase())
         )
-      : [...products];
+      : [...allProducts];
 
     if (category) {
-  result = result.filter(
-    (p) => p.category?.toLowerCase() === category
-  );
-}
+      result = result.filter((p) => p.category?.toLowerCase() === category);
+    }
     if (brand) {
       result = result.filter((p) => p.brand === brand);
     }
@@ -45,7 +45,9 @@ function ProductsContent() {
       result = result.filter((p) => p.type === type);
     }
     if (size) {
-      result = result.filter((p) => p.sizes.includes(parseInt(size)));
+      result = result.filter((p) =>
+        getProductSizeNumbers(p).includes(parseInt(size))
+      );
     }
     if (minPrice) {
       result = result.filter((p) => p.price >= parseInt(minPrice));
@@ -55,7 +57,7 @@ function ProductsContent() {
     }
 
     return result;
-  }, [category, brand, type, size, minPrice, maxPrice, search, products]);
+  }, [category, brand, type, size, minPrice, maxPrice, search, allProducts]);
 
   const pageTitle = search
     ? `Search Results for "${search}"`

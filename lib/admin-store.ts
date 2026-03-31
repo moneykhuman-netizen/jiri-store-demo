@@ -4,7 +4,17 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/lib/products";
 import { saveBrandsToFirebase } from "@/lib/firebase/brands";
+import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
+import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
 import { saveProducts } from "@/lib/firebase/products";
+import {
+  distributeStockAcrossSizes,
+  getProductSizeNumbers,
+  getTotalSizeStock,
+  normalizeProductColors,
+  normalizeProductSizeInventory,
+  type ProductSizeStock,
+} from "@/lib/product-inventory";
 
 // re-export so components can still import from this module
 export type { Product };
@@ -15,10 +25,16 @@ const ADMIN_CREDENTIALS = {
   password: "jiri2024",
 };
 
-export interface AdminProduct extends Product {
-  id: string;
+export interface AdminProduct extends Omit<Product, "sizes" | "sizeInventory"> {
+  sizes: number[];
+  sizeInventory: ProductSizeStock[];
   stock: number;
 }
+
+type AdminProductInput = Omit<AdminProduct, "sizes" | "sizeInventory"> & {
+  sizes?: Product["sizes"];
+  sizeInventory?: ProductSizeStock[];
+};
 
 export type HeroSection = "men" | "women";
 
@@ -373,6 +389,73 @@ const normalizeNewArrivalsCollection = (
   };
 };
 
+const normalizeAdminProduct = (product: AdminProductInput): AdminProduct => {
+  const sizeInventory = normalizeProductSizeInventory(product);
+  const normalizedStock =
+    typeof product.stock === "number" && Number.isFinite(product.stock)
+      ? Math.max(0, Math.trunc(product.stock))
+      : getTotalSizeStock(sizeInventory);
+
+  return {
+    ...product,
+    sizes: getProductSizeNumbers({ sizeInventory }),
+    sizeInventory,
+    colors: normalizeProductColors(product.colors),
+    stock: normalizedStock,
+    inStock: sizeInventory.some((entry) => entry.stock > 0),
+  };
+};
+
+const normalizeAdminProducts = (products: AdminProductInput[]) =>
+  products.map((product) => normalizeAdminProduct(product));
+
+const buildCatalogStateFromProducts = ({
+  products,
+  brandPresentations,
+  featuredCollection,
+  newArrivalsCollection,
+}: {
+  products: AdminProduct[];
+  brandPresentations: Record<string, BrandPresentation>;
+  featuredCollection: Partial<FeaturedCollectionSettings> | undefined;
+  newArrivalsCollection: Partial<FeaturedCollectionSettings> | undefined;
+}) => {
+  const normalizedProducts = normalizeAdminProducts(products);
+  const brandSet = new Set<string>();
+  const menTypes = new Set<string>();
+  const womenTypes = new Set<string>();
+
+  normalizedProducts.forEach((product) => {
+    brandSet.add(product.brand);
+    if (product.category === "men") {
+      menTypes.add(product.type);
+    } else if (product.category === "women") {
+      womenTypes.add(product.type);
+    }
+  });
+
+  const brands = Array.from(brandSet);
+  const categories = {
+    men: Array.from(menTypes),
+    women: Array.from(womenTypes),
+  };
+
+  return {
+    products: normalizedProducts,
+    brands,
+    brandPresentations: syncBrandPresentations(brands, brandPresentations),
+    categories,
+    featuredCollection: normalizeFeaturedCollection(
+      featuredCollection,
+      normalizedProducts
+    ),
+    newArrivalsCollection: normalizeNewArrivalsCollection(
+      newArrivalsCollection,
+      normalizedProducts
+    ),
+  };
+};
+
 interface AdminState {
   isAuthenticated: boolean;
   products: AdminProduct[];
@@ -442,12 +525,12 @@ import { products as initialProducts, brands as initialBrands, types as initialT
 
 const initialAdminProducts: AdminProduct[] = initialProducts.map((p) => {
   const stock = Math.floor(Math.random() * 50) + 10;
-  return {
+  return normalizeAdminProduct({
     ...p,
     stock,
     // derive availability from the assigned stock
     inStock: stock > 0,
-  };
+  });
 });
 
 // Calculate initial brands and categories from products
@@ -518,56 +601,54 @@ export const useAdminStore = create<AdminState>()(
       addProduct: (product: AdminProduct) => {
         let updatedProducts: AdminProduct[] = [];
         set((state) => {
-          // ensure inStock mirrors stock
-          const newProduct = {
+          const newProduct = normalizeAdminProduct({
             ...product,
             inStock: product.stock > 0,
-          };
+          });
           const newProducts = [...state.products, newProduct];
           updatedProducts = newProducts;
+          const nextFeaturedCollection = newProduct.isFeatured
+            ? normalizeFeaturedCollection(
+                {
+                  ...state.featuredCollection,
+                  productIds: [
+                    ...state.featuredCollection.productIds,
+                    newProduct.id,
+                  ],
+                },
+                newProducts
+              )
+            : normalizeFeaturedCollection(state.featuredCollection, newProducts);
+          const nextNewArrivalsCollection = newProduct.isNew
+            ? normalizeNewArrivalsCollection(
+                {
+                  ...state.newArrivalsCollection,
+                  productIds: [
+                    ...state.newArrivalsCollection.productIds,
+                    newProduct.id,
+                  ],
+                },
+                newProducts
+              )
+            : normalizeNewArrivalsCollection(
+                state.newArrivalsCollection,
+                newProducts
+              );
 
-          const brandSet = new Set<string>();
-          newProducts.forEach(p => brandSet.add(p.brand));
-          const updatedBrands = Array.from(brandSet);
-
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          newProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const updatedCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-
-          return {
+          return buildCatalogStateFromProducts({
             products: newProducts,
-            brands: updatedBrands,
-            brandPresentations: syncBrandPresentations(
-              updatedBrands,
-              state.brandPresentations
-            ),
-            categories: updatedCategories,
-            featuredCollection: newProduct.isFeatured
-              ? normalizeFeaturedCollection(
-                  {
-                    ...state.featuredCollection,
-                    productIds: [
-                      ...state.featuredCollection.productIds,
-                      newProduct.id,
-                    ],
-                  },
-                  newProducts
-                )
-              : normalizeFeaturedCollection(state.featuredCollection, newProducts),
-          };
+            brandPresentations: state.brandPresentations,
+            featuredCollection: nextFeaturedCollection,
+            newArrivalsCollection: nextNewArrivalsCollection,
+          });
         });
-        void saveProducts(updatedProducts).catch((error) => {
-          console.error("Failed to save products to Firebase:", error);
+        const nextState = get();
+        void Promise.all([
+          saveProducts(updatedProducts),
+          saveFeaturedCollectionToFirebase(nextState.featuredCollection),
+          saveNewArrivalsCollectionToFirebase(nextState.newArrivalsCollection),
+        ]).catch((error) => {
+          console.error("Failed to persist new product collections:", error);
         });
       },
 
@@ -577,27 +658,34 @@ export const useAdminStore = create<AdminState>()(
           updatedProducts = state.products.map((p) => {
             if (p.id !== id) return p;
             const merged = { ...p, ...updates };
-            // always sync availability based on final stock value
-            merged.inStock = merged.stock > 0;
-            return merged;
-          });
-          const brandSet = new Set<string>();
-          updatedProducts.forEach(p => brandSet.add(p.brand));
-          const updatedBrands = Array.from(brandSet);
+            const nextSizeInventory =
+              Array.isArray(updates.sizeInventory) || Array.isArray(updates.sizes)
+                ? normalizeProductSizeInventory({
+                    sizeInventory: updates.sizeInventory ?? merged.sizeInventory,
+                    sizes:
+                      updates.sizeInventory === undefined
+                        ? updates.sizes ?? merged.sizes
+                        : merged.sizes,
+                    stock: merged.stock,
+                    inStock: merged.inStock,
+                  })
+                : updates.stock !== undefined
+                  ? distributeStockAcrossSizes(p.sizes, updates.stock)
+                  : p.sizeInventory;
+            const nextStock =
+              Array.isArray(updates.sizeInventory) ||
+              Array.isArray(updates.sizes) ||
+              updates.stock !== undefined
+                ? getTotalSizeStock(nextSizeInventory)
+                : merged.stock;
 
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          updatedProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
+            return normalizeAdminProduct({
+              ...merged,
+              sizes: nextSizeInventory.map((entry) => entry.size),
+              sizeInventory: nextSizeInventory,
+              stock: nextStock,
+            });
           });
-          const updatedCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
           const updatedProduct = updatedProducts.find((product) => product.id === id);
           const nextFeaturedIds =
             updatedProduct && "isFeatured" in updates
@@ -614,14 +702,9 @@ export const useAdminStore = create<AdminState>()(
                 : state.newArrivalsCollection.productIds
               : state.newArrivalsCollection.productIds;
 
-          return {
+          return buildCatalogStateFromProducts({
             products: updatedProducts,
-            brands: updatedBrands,
-            brandPresentations: syncBrandPresentations(
-              updatedBrands,
-              state.brandPresentations
-            ),
-            categories: updatedCategories,
+            brandPresentations: state.brandPresentations,
             featuredCollection: normalizeFeaturedCollection(
               {
                 ...state.featuredCollection,
@@ -636,7 +719,7 @@ export const useAdminStore = create<AdminState>()(
               },
               updatedProducts
             ),
-          };
+          });
         });
         void saveProducts(updatedProducts).catch((error) => {
           console.error("Failed to save products to Firebase:", error);
@@ -648,54 +731,22 @@ export const useAdminStore = create<AdminState>()(
         set((state) => {
           const remainingProducts = state.products.filter((p) => p.id !== id);
           updatedProducts = remainingProducts;
-
-          // Recalculate brands from remaining products
-          const brandSet = new Set<string>();
-          remainingProducts.forEach(p => brandSet.add(p.brand));
-          const remainingBrands = Array.from(brandSet);
-
-          // Recalculate categories from remaining products
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          remainingProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const remainingCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-
-          return {
+          return buildCatalogStateFromProducts({
             products: remainingProducts,
-            brands: remainingBrands,
-            brandPresentations: syncBrandPresentations(
-              remainingBrands,
-              state.brandPresentations
-            ),
-            categories: remainingCategories,
-            featuredCollection: normalizeFeaturedCollection(
-              {
-                ...state.featuredCollection,
-                productIds: state.featuredCollection.productIds.filter(
-                  (productId) => productId !== id
-                ),
-              },
-              remainingProducts
-            ),
-            newArrivalsCollection: normalizeNewArrivalsCollection(
-              {
-                ...state.newArrivalsCollection,
-                productIds: state.newArrivalsCollection.productIds.filter(
-                  (productId) => productId !== id
-                ),
-              },
-              remainingProducts
-            ),
-          };
+            brandPresentations: state.brandPresentations,
+            featuredCollection: {
+              ...state.featuredCollection,
+              productIds: state.featuredCollection.productIds.filter(
+                (productId) => productId !== id
+              ),
+            },
+            newArrivalsCollection: {
+              ...state.newArrivalsCollection,
+              productIds: state.newArrivalsCollection.productIds.filter(
+                (productId) => productId !== id
+              ),
+            },
+          });
         });
         void saveProducts(updatedProducts).catch((error) => {
           console.error("Failed to save products to Firebase:", error);
@@ -720,52 +771,54 @@ export const useAdminStore = create<AdminState>()(
       },
 
       removeBrand: (brand: string) => {
+        let updatedProducts: AdminProduct[] = [];
         set((state) => {
-          // Remove all products belonging to this brand
-          const remainingProducts = state.products.filter(p => p.brand !== brand);
-          
-          // Recalculate brands from remaining products
-          const brandSet = new Set<string>();
-          remainingProducts.forEach(p => brandSet.add(p.brand));
-          const remainingBrands = Array.from(brandSet);
-          
-          // Recalculate categories from remaining products
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          remainingProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const remainingCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-          
-          return {
+          const deletedProductIds = new Set(
+            state.products
+              .filter((product) => product.brand === brand)
+              .map((product) => product.id)
+          );
+          const remainingProducts = state.products.filter(
+            (product) => product.brand !== brand
+          );
+          updatedProducts = remainingProducts;
+
+          return buildCatalogStateFromProducts({
             products: remainingProducts,
-            brands: remainingBrands,
-            brandPresentations: syncBrandPresentations(
-              remainingBrands,
-              state.brandPresentations
-            ),
-            categories: remainingCategories,
-          };
+            brandPresentations: state.brandPresentations,
+            featuredCollection: {
+              ...state.featuredCollection,
+              productIds: state.featuredCollection.productIds.filter(
+                (productId) => !deletedProductIds.has(productId)
+              ),
+            },
+            newArrivalsCollection: {
+              ...state.newArrivalsCollection,
+              productIds: state.newArrivalsCollection.productIds.filter(
+                (productId) => !deletedProductIds.has(productId)
+              ),
+            },
+          });
         });
-        void saveBrandsToFirebase(get().brands, get().brandPresentations).catch((error) => {
-          console.error("Failed to save brands to Firebase:", error);
+        const nextState = get();
+        void Promise.all([
+          saveProducts(updatedProducts),
+          saveBrandsToFirebase(nextState.brands, nextState.brandPresentations),
+          saveFeaturedCollectionToFirebase(nextState.featuredCollection),
+          saveNewArrivalsCollectionToFirebase(nextState.newArrivalsCollection),
+        ]).catch((error) => {
+          console.error("Failed to persist brand cascade delete:", error);
         });
       },
 
       setProductsFromRemote: (products) => {
         set((state) => {
+          const normalizedProducts = normalizeAdminProducts(products);
           const brandSet = new Set<string>();
           const menTypes = new Set<string>();
           const womenTypes = new Set<string>();
 
-          products.forEach((product) => {
+          normalizedProducts.forEach((product) => {
             brandSet.add(product.brand);
             if (product.category === "men") {
               menTypes.add(product.type);
@@ -781,7 +834,7 @@ export const useAdminStore = create<AdminState>()(
           };
 
           return {
-            products,
+            products: normalizedProducts,
             brands: updatedBrands,
             brandPresentations: syncBrandPresentations(
               updatedBrands,
@@ -790,11 +843,11 @@ export const useAdminStore = create<AdminState>()(
             categories: updatedCategories,
             featuredCollection: normalizeFeaturedCollection(
               state.featuredCollection,
-              products
+              normalizedProducts
             ),
             newArrivalsCollection: normalizeNewArrivalsCollection(
               state.newArrivalsCollection,
-              products
+              normalizedProducts
             ),
           };
         });
@@ -942,7 +995,9 @@ export const useAdminStore = create<AdminState>()(
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<AdminState> | undefined;
         const mergedBrands = persisted?.brands ?? currentState.brands;
-        const mergedProducts = persisted?.products ?? currentState.products;
+        const mergedProducts = normalizeAdminProducts(
+          (persisted?.products ?? currentState.products) as AdminProductInput[]
+        );
 
         return {
           ...currentState,

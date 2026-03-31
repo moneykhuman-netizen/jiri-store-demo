@@ -8,6 +8,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { ProductCard } from "@/components/product-card";
 import { useAdminStore } from "@/lib/admin-store";
+import { getProductSizeInventory, isProductAvailable } from "@/lib/product-inventory";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -53,6 +54,8 @@ export default function ProductPage({
     );
   }
 
+  const sizeInventory = getProductSizeInventory(product);
+  const productInStock = isProductAvailable(product);
   const relatedProducts = products
     .filter((p) => p.category === product.category && p.id !== product.id)
     .slice(0, 4);
@@ -114,7 +117,7 @@ export default function ProductPage({
                 src={product.images[selectedImage]}
                 alt={product.name}
                 fill
-                className="object-cover"
+                className={`object-cover ${!productInStock ? "opacity-60" : ""}`}
                 priority
               />
               {/* Badges */}
@@ -125,7 +128,7 @@ export default function ProductPage({
                 {product.discount > 0 && (
                   <Badge variant="destructive">{product.discount}% OFF</Badge>
                 )}
-                {!product.inStock && (
+                {!productInStock && (
                   <Badge variant="destructive">Out of Stock</Badge>
                 )}
               </div>
@@ -240,26 +243,33 @@ export default function ProductPage({
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {product.sizes.map((size) => (
+                {sizeInventory.map((entry) => (
                   <button
-                    key={size}
-                    onClick={() => setSelectedSize(size)}
+                    key={entry.size}
+                    type="button"
+                    onClick={() => entry.stock > 0 && setSelectedSize(entry.size)}
+                    disabled={entry.stock === 0}
                     className={`w-12 h-12 rounded-lg border text-sm font-medium transition-all ${
-                      selectedSize === size
+                      selectedSize === entry.size
                         ? "border-accent bg-accent text-accent-foreground"
-                        : "border-border hover:border-ring text-foreground"
+                        : entry.stock === 0
+                          ? "border-border text-muted-foreground opacity-40 cursor-not-allowed"
+                          : "border-border hover:border-ring text-foreground"
                     }`}
                   >
-                    {size}
+                    {entry.size}
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Disabled sizes are currently unavailable.
+              </p>
             </div>
 
             {/* WhatsApp Order Button */}
             <div className="space-y-3 pt-4">
               <a
-                href={product.inStock ? generateWhatsAppLink() : undefined}
+                href={productInStock ? generateWhatsAppLink() : undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block"
@@ -267,18 +277,18 @@ export default function ProductPage({
                 <Button
                   size="lg"
                   className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-14 text-lg"
-                  disabled={!product.inStock || !selectedSize || !selectedColor}
+                  disabled={!productInStock || !selectedSize || !selectedColor}
                 >
                   <MessageCircle className="w-5 h-5" />
-                  {product.inStock ? "Order on WhatsApp" : "Out of Stock"}
+                  {productInStock ? "Order on WhatsApp" : "Out of Stock"}
                 </Button>
               </a>
-              {(!selectedSize || !selectedColor) && product.inStock && (
+              {(!selectedSize || !selectedColor) && productInStock && (
                 <p className="text-sm text-center text-muted-foreground">
                   Please select size and color to proceed
                 </p>
               )}
-              {!product.inStock && (
+              {!productInStock && (
                 <p className="text-sm text-center text-muted-foreground">
                   This product is currently out of stock. Please check back later.
                 </p>
