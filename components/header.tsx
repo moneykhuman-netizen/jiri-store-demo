@@ -239,6 +239,13 @@ export function Header() {
                 ))}
               </div>
             </div>
+            <Link
+              href="/products"
+              className="block text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors font-medium"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              All Products
+            </Link>
           </nav>
         </div>
       )}

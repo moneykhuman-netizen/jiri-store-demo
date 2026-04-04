@@ -53,7 +53,7 @@ export function NewArrivals() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
           {newProducts.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

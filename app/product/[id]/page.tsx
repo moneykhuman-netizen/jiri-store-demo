@@ -353,7 +353,7 @@ export default function ProductPage({
             <h2 className="text-2xl font-serif font-bold text-foreground mb-8">
               You May Also Like
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 md:grid-cols-4 md:gap-6">
               {relatedProducts.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
