@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { ManagedCategoriesSyncInit } from '@/components/managed-categories-sync-init'
 import { ProductsSyncInit } from '@/components/products-sync-init'
 import './globals.css'
 
@@ -46,6 +47,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className="font-sans antialiased scroll-smooth">
         <ProductsSyncInit />
+        <ManagedCategoriesSyncInit />
         {children}
         <Analytics />
       </body>

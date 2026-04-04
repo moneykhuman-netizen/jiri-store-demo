@@ -194,7 +194,7 @@ export default function CategoriesPage() {
               {categoryToDeleteInfo && categoryToDeleteInfo.count > 0 && (
                 <span className="block mt-2 text-amber-600">
                   Warning: This category has {categoryToDeleteInfo.count} associated products.
-                  The products will not be deleted but will need to be reassigned.
+                  Deleting it will remove those products from the backbone and clean any featured or new-arrival references automatically.
                 </span>
               )}
             </AlertDialogDescription>

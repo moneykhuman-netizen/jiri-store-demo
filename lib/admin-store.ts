@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import type { Product } from "@/lib/products";
 import { saveBrandsToFirebase } from "@/lib/firebase/brands";
 import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
+import { saveManagedCategoriesToFirebase } from "@/lib/firebase/managed-categories";
 import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
 import { saveProducts } from "@/lib/firebase/products";
 import {
@@ -89,6 +90,11 @@ export interface FeaturedCollectionSettings {
   title: string;
   description: string;
   productIds: string[];
+}
+
+export interface ManagedCategories {
+  men: string[];
+  women: string[];
 }
 
 export const HERO_BUTTON_LINKS: Record<HeroSection, string> = {
@@ -409,24 +415,51 @@ const normalizeAdminProduct = (product: AdminProductInput): AdminProduct => {
 const normalizeAdminProducts = (products: AdminProductInput[]) =>
   products.map((product) => normalizeAdminProduct(product));
 
-const buildCatalogStateFromProducts = ({
-  products,
-  brandPresentations,
-  featuredCollection,
-  newArrivalsCollection,
-}: {
-  products: AdminProduct[];
-  brandPresentations: Record<string, BrandPresentation>;
-  featuredCollection: Partial<FeaturedCollectionSettings> | undefined;
-  newArrivalsCollection: Partial<FeaturedCollectionSettings> | undefined;
-}) => {
-  const normalizedProducts = normalizeAdminProducts(products);
-  const brandSet = new Set<string>();
+const createEmptyManagedCategories = (): ManagedCategories => ({
+  men: [],
+  women: [],
+});
+
+const normalizeManagedCategoryList = (categories: unknown): string[] => {
+  if (!Array.isArray(categories)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+
+  return categories.reduce<string[]>((acc, category) => {
+    if (typeof category !== "string") {
+      return acc;
+    }
+
+    const trimmed = category.trim();
+    if (!trimmed) {
+      return acc;
+    }
+
+    const normalizedKey = trimmed.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      return acc;
+    }
+
+    seen.add(normalizedKey);
+    acc.push(trimmed);
+    return acc;
+  }, []);
+};
+
+const normalizeManagedCategories = (categories?: Partial<ManagedCategories>): ManagedCategories => ({
+  men: normalizeManagedCategoryList(categories?.men),
+  women: normalizeManagedCategoryList(categories?.women),
+});
+
+const deriveCategoriesFromProducts = (
+  products: AdminProduct[]
+): ManagedCategories => {
   const menTypes = new Set<string>();
   const womenTypes = new Set<string>();
 
-  normalizedProducts.forEach((product) => {
-    brandSet.add(product.brand);
+  products.forEach((product) => {
     if (product.category === "men") {
       menTypes.add(product.type);
     } else if (product.category === "women") {
@@ -434,11 +467,45 @@ const buildCatalogStateFromProducts = ({
     }
   });
 
-  const brands = Array.from(brandSet);
-  const categories = {
+  return {
     men: Array.from(menTypes),
     women: Array.from(womenTypes),
   };
+};
+
+const mergeManagedCategories = (
+  derivedCategories: ManagedCategories,
+  managedCategories: ManagedCategories
+): ManagedCategories => ({
+  men: [...derivedCategories.men, ...managedCategories.men.filter((category) => !derivedCategories.men.includes(category))],
+  women: [...derivedCategories.women, ...managedCategories.women.filter((category) => !derivedCategories.women.includes(category))],
+});
+
+const buildCatalogStateFromProducts = ({
+  products,
+  brandPresentations,
+  featuredCollection,
+  newArrivalsCollection,
+  managedCategories,
+}: {
+  products: AdminProduct[];
+  brandPresentations: Record<string, BrandPresentation>;
+  featuredCollection: Partial<FeaturedCollectionSettings> | undefined;
+  newArrivalsCollection: Partial<FeaturedCollectionSettings> | undefined;
+  managedCategories: ManagedCategories;
+}) => {
+  const normalizedProducts = normalizeAdminProducts(products);
+  const brandSet = new Set<string>();
+
+  normalizedProducts.forEach((product) => {
+    brandSet.add(product.brand);
+  });
+
+  const brands = Array.from(brandSet);
+  const categories = mergeManagedCategories(
+    deriveCategoriesFromProducts(normalizedProducts),
+    managedCategories
+  );
 
   return {
     products: normalizedProducts,
@@ -461,6 +528,7 @@ interface AdminState {
   products: AdminProduct[];
   brands: string[];
   brandPresentations: Record<string, BrandPresentation>;
+  managedCategories: ManagedCategories;
   categories: { men: string[]; women: string[] };
   // homepage settings
   heroSlides: HeroSlide[];
@@ -494,6 +562,7 @@ interface AdminState {
     brands: string[],
     brandPresentations: Record<string, BrandPresentation>
   ) => void;
+  setManagedCategoriesFromRemote: (categories: ManagedCategories) => void;
   addCategory: (gender: "men" | "women", category: string) => void;
   removeCategory: (gender: "men" | "women", category: string) => void;
   // homepage actions
@@ -521,7 +590,7 @@ interface AdminState {
 }
 
 // Convert existing products to AdminProducts with stock
-import { products as initialProducts, brands as initialBrands, types as initialTypes } from "./products";
+import { products as initialProducts } from "./products";
 
 const initialAdminProducts: AdminProduct[] = initialProducts.map((p) => {
   const stock = Math.floor(Math.random() * 50) + 10;
@@ -535,21 +604,15 @@ const initialAdminProducts: AdminProduct[] = initialProducts.map((p) => {
 
 // Calculate initial brands and categories from products
 const brandSet = new Set<string>();
-const menTypes = new Set<string>();
-const womenTypes = new Set<string>();
 initialAdminProducts.forEach(p => {
   brandSet.add(p.brand);
-  if (p.category === 'men') {
-    menTypes.add(p.type);
-  } else if (p.category === 'women') {
-    womenTypes.add(p.type);
-  }
 });
 const initialBrandsFromProducts = Array.from(brandSet);
-const initialCategoriesFromProducts = {
-  men: Array.from(menTypes),
-  women: Array.from(womenTypes),
-};
+const initialManagedCategories = createEmptyManagedCategories();
+const initialCategoriesFromProducts = mergeManagedCategories(
+  deriveCategoriesFromProducts(initialAdminProducts),
+  initialManagedCategories
+);
 
 export const useAdminStore = create<AdminState>()(
   persist(
@@ -558,6 +621,7 @@ export const useAdminStore = create<AdminState>()(
       products: initialAdminProducts,
       brands: initialBrandsFromProducts,
       brandPresentations: syncBrandPresentations(initialBrandsFromProducts),
+      managedCategories: initialManagedCategories,
       categories: initialCategoriesFromProducts,
       heroSlides: HERO_DEFAULT_SLIDES.map((slide) => ({ ...slide })),
       homepageCategories: normalizeHomepageCategories(),
@@ -640,6 +704,7 @@ export const useAdminStore = create<AdminState>()(
             brandPresentations: state.brandPresentations,
             featuredCollection: nextFeaturedCollection,
             newArrivalsCollection: nextNewArrivalsCollection,
+            managedCategories: state.managedCategories,
           });
         });
         const nextState = get();
@@ -719,6 +784,7 @@ export const useAdminStore = create<AdminState>()(
               },
               updatedProducts
             ),
+            managedCategories: state.managedCategories,
           });
         });
         void saveProducts(updatedProducts).catch((error) => {
@@ -746,6 +812,7 @@ export const useAdminStore = create<AdminState>()(
                 (productId) => productId !== id
               ),
             },
+            managedCategories: state.managedCategories,
           });
         });
         void saveProducts(updatedProducts).catch((error) => {
@@ -798,6 +865,7 @@ export const useAdminStore = create<AdminState>()(
                 (productId) => !deletedProductIds.has(productId)
               ),
             },
+            managedCategories: state.managedCategories,
           });
         });
         const nextState = get();
@@ -813,43 +881,13 @@ export const useAdminStore = create<AdminState>()(
 
       setProductsFromRemote: (products) => {
         set((state) => {
-          const normalizedProducts = normalizeAdminProducts(products);
-          const brandSet = new Set<string>();
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-
-          normalizedProducts.forEach((product) => {
-            brandSet.add(product.brand);
-            if (product.category === "men") {
-              menTypes.add(product.type);
-            } else if (product.category === "women") {
-              womenTypes.add(product.type);
-            }
+          return buildCatalogStateFromProducts({
+            products,
+            brandPresentations: state.brandPresentations,
+            featuredCollection: state.featuredCollection,
+            newArrivalsCollection: state.newArrivalsCollection,
+            managedCategories: state.managedCategories,
           });
-
-          const updatedBrands = Array.from(brandSet);
-          const updatedCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-
-          return {
-            products: normalizedProducts,
-            brands: updatedBrands,
-            brandPresentations: syncBrandPresentations(
-              updatedBrands,
-              state.brandPresentations
-            ),
-            categories: updatedCategories,
-            featuredCollection: normalizeFeaturedCollection(
-              state.featuredCollection,
-              normalizedProducts
-            ),
-            newArrivalsCollection: normalizeNewArrivalsCollection(
-              state.newArrivalsCollection,
-              normalizedProducts
-            ),
-          };
         });
       },
 
@@ -874,25 +912,88 @@ export const useAdminStore = create<AdminState>()(
         });
       },
 
+      setManagedCategoriesFromRemote: (categories) => {
+        set((state) => ({
+          managedCategories: normalizeManagedCategories(categories),
+          categories: mergeManagedCategories(
+            deriveCategoriesFromProducts(state.products),
+            normalizeManagedCategories(categories)
+          ),
+        }));
+      },
+
       addCategory: (gender: "men" | "women", category: string) => {
         const state = get();
         if (!state.categories[gender].includes(category)) {
+          const nextManagedCategories = normalizeManagedCategories({
+            ...state.managedCategories,
+            [gender]: [...state.managedCategories[gender], category],
+          });
+
           set({
-            categories: {
-              ...state.categories,
-              [gender]: [...state.categories[gender], category],
-            },
+            managedCategories: nextManagedCategories,
+            categories: mergeManagedCategories(
+              deriveCategoriesFromProducts(state.products),
+              nextManagedCategories
+            ),
+          });
+
+          void saveManagedCategoriesToFirebase(nextManagedCategories).catch((error) => {
+            console.error("Failed to save managed categories to Firebase:", error);
           });
         }
       },
 
       removeCategory: (gender: "men" | "women", category: string) => {
-        set((state) => ({
-          categories: {
-            ...state.categories,
-            [gender]: state.categories[gender].filter((c) => c !== category),
-          },
-        }));
+        let updatedProducts: AdminProduct[] = [];
+        let nextManagedCategories = createEmptyManagedCategories();
+
+        set((state) => {
+          const deletedProductIds = new Set(
+            state.products
+              .filter(
+                (product) =>
+                  product.category === gender && product.type === category
+              )
+              .map((product) => product.id)
+          );
+          const remainingProducts = state.products.filter(
+            (product) => !deletedProductIds.has(product.id)
+          );
+          updatedProducts = remainingProducts;
+
+          return {
+            managedCategories: nextManagedCategories,
+            ...buildCatalogStateFromProducts({
+              products: remainingProducts,
+              brandPresentations: state.brandPresentations,
+              featuredCollection: {
+                ...state.featuredCollection,
+                productIds: state.featuredCollection.productIds.filter(
+                  (productId) => !deletedProductIds.has(productId)
+                ),
+              },
+              newArrivalsCollection: {
+                ...state.newArrivalsCollection,
+                productIds: state.newArrivalsCollection.productIds.filter(
+                  (productId) => !deletedProductIds.has(productId)
+                ),
+              },
+              managedCategories: nextManagedCategories,
+            }),
+          };
+        });
+
+        const nextState = get();
+        void Promise.all([
+          saveProducts(updatedProducts),
+          saveManagedCategoriesToFirebase(nextManagedCategories),
+          saveBrandsToFirebase(nextState.brands, nextState.brandPresentations),
+          saveFeaturedCollectionToFirebase(nextState.featuredCollection),
+          saveNewArrivalsCollectionToFirebase(nextState.newArrivalsCollection),
+        ]).catch((error) => {
+          console.error("Failed to persist category cascade delete:", error);
+        });
       },
 
       // homepage actions
@@ -984,6 +1085,7 @@ export const useAdminStore = create<AdminState>()(
         products: state.products,
         brands: state.brands,
         brandPresentations: state.brandPresentations,
+        managedCategories: state.managedCategories,
         categories: state.categories,
         heroSlides: state.heroSlides,
         homepageCategories: state.homepageCategories,
@@ -994,22 +1096,34 @@ export const useAdminStore = create<AdminState>()(
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<AdminState> | undefined;
-        const mergedBrands = persisted?.brands ?? currentState.brands;
         const mergedProducts = normalizeAdminProducts(
           (persisted?.products ?? currentState.products) as AdminProductInput[]
         );
+        const mergedManagedCategories = normalizeManagedCategories(
+          persisted?.managedCategories
+        );
+        const catalogState = buildCatalogStateFromProducts({
+          products: mergedProducts,
+          brandPresentations:
+            (persisted?.brandPresentations as
+              | Record<string, PersistedBrandPresentation>
+              | undefined) ?? currentState.brandPresentations,
+          featuredCollection:
+            (persisted?.featuredCollection as
+              | Partial<FeaturedCollectionSettings>
+              | undefined) ?? currentState.featuredCollection,
+          newArrivalsCollection:
+            (persisted?.newArrivalsCollection as
+              | Partial<FeaturedCollectionSettings>
+              | undefined) ?? currentState.newArrivalsCollection,
+          managedCategories: mergedManagedCategories,
+        });
 
         return {
           ...currentState,
           ...persisted,
-          products: mergedProducts,
-          brands: mergedBrands,
-          brandPresentations: syncBrandPresentations(
-            mergedBrands,
-            persisted?.brandPresentations as
-              | Record<string, PersistedBrandPresentation>
-              | undefined
-          ),
+          ...catalogState,
+          managedCategories: mergedManagedCategories,
           heroSlides: normalizeHeroSlides(
             persisted?.heroSlides as PersistedHeroSlide[] | undefined
           ),
@@ -1018,16 +1132,6 @@ export const useAdminStore = create<AdminState>()(
               | Partial<Record<HeroSection, PersistedHomepageCategoryCard>>
               | PersistedHomepageCategoryCard[]
               | undefined
-          ),
-          featuredCollection: normalizeFeaturedCollection(
-            persisted?.featuredCollection as Partial<FeaturedCollectionSettings> | undefined,
-            mergedProducts
-          ),
-          newArrivalsCollection: normalizeNewArrivalsCollection(
-            persisted?.newArrivalsCollection as
-              | Partial<FeaturedCollectionSettings>
-              | undefined,
-            mergedProducts
           ),
           heroBanner: currentState.heroBanner,
         };
