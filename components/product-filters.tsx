@@ -248,7 +248,9 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
             <div className="space-y-4">
               <Slider
                 value={priceRange}
-                onValueChange={setPriceRange}
+                onValueChange={(value) =>
+                  setPriceRange([value[0] ?? defaultPriceRange[0], value[1] ?? defaultPriceRange[1]])
+                }
                 max={20000}
                 min={0}
                 step={500}

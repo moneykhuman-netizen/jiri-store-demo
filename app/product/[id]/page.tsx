@@ -8,6 +8,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { ProductCard } from "@/components/product-card";
 import { useAdminStore } from "@/lib/admin-store";
+import { normalizeProductImages } from "@/lib/products";
 import { getProductSizeInventory, isProductAvailable } from "@/lib/product-inventory";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,8 @@ export default function ProductPage({
   }
 
   const sizeInventory = getProductSizeInventory(product);
+  const productImages = normalizeProductImages(product.images);
+  const activeImageIndex = Math.min(selectedImage, productImages.length - 1);
   const productInStock = isProductAvailable(product);
   const relatedProducts = products
     .filter((p) => p.category === product.category && p.id !== product.id)
@@ -114,7 +117,7 @@ export default function ProductPage({
             {/* Main Image */}
             <div className="relative aspect-square rounded-xl overflow-hidden bg-secondary">
               <Image
-                src={product.images[selectedImage]}
+                src={productImages[activeImageIndex]}
                 alt={product.name}
                 fill
                 className={`object-cover ${!productInStock ? "opacity-60" : ""}`}
@@ -144,9 +147,9 @@ export default function ProductPage({
             </div>
 
             {/* Thumbnails */}
-            {product.images.length > 1 && (
+            {productImages.length > 1 && (
               <div className="flex gap-3">
-                {product.images.map((image, index) => (
+                {productImages.map((image, index) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}

@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { Product } from "@/lib/admin-store";
+import type { Product } from "@/lib/admin-store";
+import { getPrimaryProductImage } from "@/lib/products";
 import { Badge } from "@/components/ui/badge";
 
 interface ProductCardProps {
@@ -11,6 +12,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const primaryImage = getPrimaryProductImage(product);
+
   return (
     <Link href={`/product/${product.id}`} className="group block h-full min-w-0">
       <div
@@ -21,7 +24,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {/* Image Container */}
         <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-secondary">
           <Image
-            src={product.images[0]}
+            src={primaryImage}
             alt={product.name}
             fill
             className={`object-cover group-hover:scale-105 transition-transform duration-500 ${

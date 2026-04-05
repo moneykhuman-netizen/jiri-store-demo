@@ -25,6 +25,32 @@ export interface Product {
   isNew: boolean;
 }
 
+export const DEFAULT_PRODUCT_IMAGE =
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80";
+
+export const normalizeProductImages = (images: unknown): string[] => {
+  const normalizedImages = Array.isArray(images)
+    ? images.reduce<string[]>((acc, image) => {
+        if (typeof image !== "string") {
+          return acc;
+        }
+
+        const trimmedImage = image.trim();
+        if (!trimmedImage || acc.includes(trimmedImage)) {
+          return acc;
+        }
+
+        acc.push(trimmedImage);
+        return acc;
+      }, [])
+    : [];
+
+  return normalizedImages.length > 0 ? normalizedImages : [DEFAULT_PRODUCT_IMAGE];
+};
+
+export const getPrimaryProductImage = (product: { images?: unknown }) =>
+  normalizeProductImages(product.images)[0];
+
 export const brands = [
   "Nike",
   "Adidas",

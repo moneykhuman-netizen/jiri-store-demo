@@ -15,14 +15,20 @@ import Link from "next/link";
 function ProductsContent() {
   const searchParams = useSearchParams();
   const allProducts = useAdminStore((state) => state.products);
-  
-  const category = searchParams.get("category")?.toLowerCase() || null;
+  const featuredCollection = useAdminStore((state) => state.featuredCollection);
+  const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
+
+  const categoryParam = searchParams.get("category")?.toLowerCase();
+  const category =
+    categoryParam === "men" || categoryParam === "women" ? categoryParam : null;
   const brand = searchParams.get("brand");
   const type = searchParams.get("type");
   const size = searchParams.get("size");
   const minPrice = searchParams.get("minPrice");
   const maxPrice = searchParams.get("maxPrice");
   const search = searchParams.get("search");
+  const featured = searchParams.get("featured") === "true";
+  const newArrivals = searchParams.get("newArrivals") === "true";
 
   const filteredProducts = useMemo(() => {
     // Always start from the full products backbone, then apply page filters.
@@ -35,6 +41,14 @@ function ProductsContent() {
         )
       : [...allProducts];
 
+    if (featured) {
+      const featuredProductIds = new Set(featuredCollection.productIds);
+      result = result.filter((p) => featuredProductIds.has(p.id));
+    }
+    if (newArrivals) {
+      const newArrivalProductIds = new Set(newArrivalsCollection.productIds);
+      result = result.filter((p) => newArrivalProductIds.has(p.id));
+    }
     if (category) {
       result = result.filter((p) => p.category?.toLowerCase() === category);
     }
@@ -57,10 +71,27 @@ function ProductsContent() {
     }
 
     return result;
-  }, [category, brand, type, size, minPrice, maxPrice, search, allProducts]);
+  }, [
+    category,
+    brand,
+    type,
+    size,
+    minPrice,
+    maxPrice,
+    search,
+    featured,
+    newArrivals,
+    allProducts,
+    featuredCollection.productIds,
+    newArrivalsCollection.productIds,
+  ]);
 
   const pageTitle = search
     ? `Search Results for "${search}"`
+    : featured
+    ? featuredCollection.title
+    : newArrivals
+    ? newArrivalsCollection.title
     : category
     ? `${category.charAt(0).toUpperCase() + category.slice(1)}'s Collection`
     : "All Products";
@@ -73,7 +104,7 @@ function ProductsContent() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Filters Sidebar */}
           <aside className="lg:w-64 flex-shrink-0">
-            <ProductFilters currentCategory={category} />
+            <ProductFilters currentCategory={category ?? undefined} />
           </aside>
 
           {/* Products Grid */}

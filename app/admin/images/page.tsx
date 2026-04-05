@@ -12,7 +12,7 @@ import Link from "next/link";
 
 export default function ImagesPage() {
   const products = useAdminStore((state) => state.products);
-  const updateProduct = useAdminStore((state) => state.updateProduct);
+  const updateProductImages = useAdminStore((state) => state.updateProductImages);
 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [newImageUrl, setNewImageUrl] = useState("");
@@ -22,8 +22,9 @@ export default function ImagesPage() {
 
   const handleAddImage = () => {
     if (selectedProduct && newImageUrl.trim()) {
-      const updatedImages = [...selectedProduct.images, newImageUrl.trim()];
-      updateProduct(selectedProductId, { images: updatedImages });
+      const trimmedImageUrl = newImageUrl.trim();
+      const updatedImages = [...selectedProduct.images, trimmedImageUrl];
+      updateProductImages(selectedProductId, updatedImages);
       setNewImageUrl("");
       setSuccessMessage("Image added successfully!");
       setTimeout(() => setSuccessMessage(""), 3000);
@@ -32,8 +33,16 @@ export default function ImagesPage() {
 
   const handleRemoveImage = (index: number) => {
     if (selectedProduct) {
+      if (selectedProduct.images.length <= 1) {
+        setSuccessMessage("At least one product image is required.");
+        setTimeout(() => setSuccessMessage(""), 3000);
+        return;
+      }
+
       const updatedImages = selectedProduct.images.filter((_, i) => i !== index);
-      updateProduct(selectedProductId, { images: updatedImages });
+      updateProductImages(selectedProductId, updatedImages);
+      setSuccessMessage("Image removed successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
     }
   };
 
@@ -42,7 +51,9 @@ export default function ImagesPage() {
       const updatedImages = [...selectedProduct.images];
       const [removed] = updatedImages.splice(index, 1);
       updatedImages.unshift(removed);
-      updateProduct(selectedProductId, { images: updatedImages });
+      updateProductImages(selectedProductId, updatedImages);
+      setSuccessMessage("Primary image updated successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
     }
   };
 

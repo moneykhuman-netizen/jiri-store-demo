@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Product } from "@/lib/products";
+import { normalizeProductImages, type Product } from "@/lib/products";
 import { saveBrandsToFirebase } from "@/lib/firebase/brands";
 import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
 import { saveManagedCategoriesToFirebase } from "@/lib/firebase/managed-categories";
@@ -407,6 +407,7 @@ const normalizeAdminProduct = (product: AdminProductInput): AdminProduct => {
     sizes: getProductSizeNumbers({ sizeInventory }),
     sizeInventory,
     colors: normalizeProductColors(product.colors),
+    images: normalizeProductImages(product.images),
     stock: normalizedStock,
     inStock: sizeInventory.some((entry) => entry.stock > 0),
   };
@@ -489,7 +490,7 @@ const buildCatalogStateFromProducts = ({
   managedCategories,
 }: {
   products: AdminProduct[];
-  brandPresentations: Record<string, BrandPresentation>;
+  brandPresentations: Record<string, PersistedBrandPresentation>;
   featuredCollection: Partial<FeaturedCollectionSettings> | undefined;
   newArrivalsCollection: Partial<FeaturedCollectionSettings> | undefined;
   managedCategories: ManagedCategories;
@@ -550,6 +551,7 @@ interface AdminState {
   logout: () => void;
   addProduct: (product: AdminProduct) => void;
   updateProduct: (id: string, updates: Partial<AdminProduct>) => void;
+  updateProductImages: (id: string, images: string[]) => void;
   deleteProduct: (id: string) => void;
   setProductsFromRemote: (products: AdminProduct[]) => void;
   addBrand: (brand: string) => void;
@@ -790,6 +792,10 @@ export const useAdminStore = create<AdminState>()(
         void saveProducts(updatedProducts).catch((error) => {
           console.error("Failed to save products to Firebase:", error);
         });
+      },
+
+      updateProductImages: (id, images) => {
+        get().updateProduct(id, { images: normalizeProductImages(images) });
       },
 
       deleteProduct: (id: string) => {

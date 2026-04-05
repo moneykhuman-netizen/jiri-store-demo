@@ -5,13 +5,21 @@ import { useAdminStore } from "@/lib/admin-store";
 
 export function Footer() {
   const social = useAdminStore((s) => s.socialLinks);
+  const storePhoneNumber = "919863146558";
+  const defaultWhatsAppHref = `https://wa.me/${storePhoneNumber}?text=${encodeURIComponent(
+    "Hi Pickup Jiristore! I have a query."
+  )}`;
+  const exchangePolicyWhatsAppHref = `https://wa.me/${storePhoneNumber}?text=${encodeURIComponent(
+    "Hi Pickup Jiristore! I have a question about your exchange policy."
+  )}`;
+
   return (
     <footer className="bg-primary text-primary-foreground">
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 items-start gap-y-8 md:grid-cols-2 md:gap-y-10 lg:grid-cols-[1.02fr_0.98fr_0.98fr_1fr] lg:gap-x-8 lg:gap-y-8">
           {/* Brand */}
           <div className="pt-0.5 lg:pr-4">
-            <div className="mb-3.5 flex flex-col items-start gap-0 leading-none">
+            <div className="mb-3.5 inline-flex max-w-full items-end gap-1.5 whitespace-nowrap leading-none">
               <span className="text-[11px] font-medium tracking-[0.18em] text-primary-foreground/60 sm:text-xs">
                 Pickup
               </span>
@@ -80,17 +88,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/products" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <Link href="/products?newArrivals=true" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
                   New Arrivals
                 </Link>
               </li>
               <li>
-                <Link href="/products" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
-                  Sale Items
-                </Link>
-              </li>
-              <li>
-                <Link href="/products" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <Link href="/products?featured=true" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
                   Featured Brands
                 </Link>
               </li>
@@ -102,22 +105,27 @@ export function Footer() {
             <h3 className="mb-4 text-[17px] font-semibold tracking-tight">Customer Service</h3>
             <ul className="space-y-3">
               <li>
-                <a href="#" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <a
+                  href={exchangePolicyWhatsAppHref}
+                  className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Exchange Policy
                 </a>
               </li>
               <li>
-                <a href="#" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <Link href="/size-guide" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
                   Size Guide
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <Link href="/faq" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
                   FAQ
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
+                <a href="#footer-contact" className="text-sm leading-6 text-primary-foreground/76 transition-opacity hover:opacity-100">
                   Contact Us
                 </a>
               </li>
@@ -125,8 +133,8 @@ export function Footer() {
           </div>
 
           {/* Store Info */}
-          <div className="flex flex-col items-start">
-            <h3 className="mb-4 text-[17px] font-semibold tracking-tight">Visit Our Store</h3>
+          <div id="footer-contact" className="flex scroll-mt-24 flex-col items-start">
+            <h3 className="mb-4 text-[17px] font-semibold tracking-tight">Store Location</h3>
             <ul className="space-y-[18px]">
               <li className="flex items-start gap-3.5">
                 <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-primary-foreground/72" />
@@ -151,7 +159,7 @@ export function Footer() {
             </ul>
             {/* WhatsApp CTA */}
             <a
-              href="https://wa.me/919863146558?text=Hi%20Pickup%20Jiristore!%20I%20have%20a%20query."
+              href={defaultWhatsAppHref}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-[22px] inline-flex items-center gap-2 self-start rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-700"
@@ -167,15 +175,15 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="mt-10 flex flex-col gap-4 border-t border-primary-foreground/20 pt-7 text-center md:flex-row md:items-center md:justify-between md:text-left">
           <p className="text-sm text-primary-foreground/60">
-            &copy; {new Date().getFullYear()} Pickup Jiristore. All rights reserved.
+            &copy; {new Date().getFullYear()} <span className="whitespace-nowrap">Pickup Jiristore</span>. All rights reserved.
           </p>
           <div className="flex flex-wrap justify-center gap-6 md:justify-end">
-            <a href="#" className="text-sm text-primary-foreground/60 transition-opacity hover:opacity-100">
+            <Link href="/privacy-policy" className="text-sm text-primary-foreground/60 transition-opacity hover:opacity-100">
               Privacy Policy
-            </a>
-            <a href="#" className="text-sm text-primary-foreground/60 transition-opacity hover:opacity-100">
+            </Link>
+            <Link href="/terms-of-service" className="text-sm text-primary-foreground/60 transition-opacity hover:opacity-100">
               Terms of Service
-            </a>
+            </Link>
           </div>
         </div>
       </div>
