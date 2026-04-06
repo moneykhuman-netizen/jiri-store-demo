@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   ExternalLink,
-  MessageSquareText,
   Star,
   ThumbsDown,
   Trash2,
