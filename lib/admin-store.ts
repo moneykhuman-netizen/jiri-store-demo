@@ -2,7 +2,11 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { normalizeProductImages, type Product } from "@/lib/products";
+import {
+  normalizeProductImages,
+  normalizeProductVideoUrl,
+  type Product,
+} from "@/lib/products";
 import { saveBrandsToFirebase } from "@/lib/firebase/brands";
 import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
 import { saveManagedCategoriesToFirebase } from "@/lib/firebase/managed-categories";
@@ -397,17 +401,20 @@ const normalizeNewArrivalsCollection = (
 
 const normalizeAdminProduct = (product: AdminProductInput): AdminProduct => {
   const sizeInventory = normalizeProductSizeInventory(product);
+  const normalizedVideoUrl = normalizeProductVideoUrl(product.videoUrl);
   const normalizedStock =
     typeof product.stock === "number" && Number.isFinite(product.stock)
       ? Math.max(0, Math.trunc(product.stock))
       : getTotalSizeStock(sizeInventory);
+  const { videoUrl: _videoUrl, ...productWithoutVideo } = product;
 
   return {
-    ...product,
+    ...productWithoutVideo,
     sizes: getProductSizeNumbers({ sizeInventory }),
     sizeInventory,
     colors: normalizeProductColors(product.colors),
     images: normalizeProductImages(product.images),
+    ...(normalizedVideoUrl ? { videoUrl: normalizedVideoUrl } : {}),
     stock: normalizedStock,
     inStock: sizeInventory.some((entry) => entry.stock > 0),
   };

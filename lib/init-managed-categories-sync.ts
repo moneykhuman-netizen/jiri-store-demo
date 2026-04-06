@@ -22,16 +22,21 @@ export function initManagedCategoriesSync() {
 
   void (async () => {
     try {
-      const [{ doc, getDoc }, { db }] = await Promise.all([
+      const [{ doc, getDoc }, { auth, db }] = await Promise.all([
         import("firebase/firestore"),
         import("@/lib/firebase/client"),
       ]);
       const managedCategoriesDocRef = doc(db, "siteContent", "managedCategories");
       const snapshot = await getDoc(managedCategoriesDocRef);
 
-      if (!snapshot.exists()) {
-        await saveManagedCategoriesToFirebase(EMPTY_MANAGED_CATEGORIES);
-      }
+      const seedManagedCategoriesIfMissing = async () => {
+        if (!snapshot.exists()) {
+          if (!auth.currentUser) return;
+          await saveManagedCategoriesToFirebase(EMPTY_MANAGED_CATEGORIES);
+        }
+      };
+
+      await seedManagedCategoriesIfMissing();
 
       subscribeManagedCategoriesFromFirebase((categories) => {
         setManagedCategoriesFromRemote(categories ?? EMPTY_MANAGED_CATEGORIES);

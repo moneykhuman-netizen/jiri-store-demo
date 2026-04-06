@@ -44,6 +44,7 @@ export default function AddProductPage() {
     description: "",
     stock: "",
     imageUrl: "",
+    videoUrl: "",
   });
 
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
@@ -79,6 +80,7 @@ export default function AddProductPage() {
       sizeInventory: normalizedSelectedSizes.map((size) => ({ size, stock: 1 })),
       colors: selectedColors.map((color) => color.trim()).filter(Boolean),
       images: formData.imageUrl ? [formData.imageUrl] : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80"],
+      videoUrl: formData.videoUrl,
       description: formData.description,
       features: features.filter((f) => f.trim() !== ""),
       inStock: stockVal > 0,
@@ -445,18 +447,34 @@ export default function AddProductPage() {
             <CardDescription>Add product image URL</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="imageUrl">Image URL</Label>
-              <Input
-                id="imageUrl"
-                type="url"
-                placeholder="https://example.com/image.jpg"
-                value={formData.imageUrl}
-                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave empty to use a default product image
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="imageUrl">Image URL</Label>
+                <Input
+                  id="imageUrl"
+                  type="url"
+                  placeholder="https://example.com/image.jpg"
+                  value={formData.imageUrl}
+                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to use a default product image
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="videoUrl">Product Video URL (optional)</Label>
+                <Input
+                  id="videoUrl"
+                  type="url"
+                  placeholder="https://example.com/product-video.mp4"
+                  value={formData.videoUrl}
+                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep the product image-only.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

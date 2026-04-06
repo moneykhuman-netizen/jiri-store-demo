@@ -1,6 +1,15 @@
 "use client";
 
 import type { AdminProduct } from "@/lib/admin-store";
+import { normalizeProductVideoUrl } from "@/lib/products";
+import { removeUndefinedFields } from "@/lib/utils";
+
+const serializeProductForFirestore = (product: AdminProduct): AdminProduct => {
+  return removeUndefinedFields({
+    ...product,
+    videoUrl: normalizeProductVideoUrl(product.videoUrl),
+  });
+};
 
 export const saveProducts = async (products: AdminProduct[]) => {
   const [{ doc, setDoc }, { db }] = await Promise.all([
@@ -9,7 +18,9 @@ export const saveProducts = async (products: AdminProduct[]) => {
   ]);
   const productsDocRef = doc(db, "siteContent", "products");
 
-  await setDoc(productsDocRef, { products });
+  await setDoc(productsDocRef, {
+    products: products.map((product) => serializeProductForFirestore(product)),
+  });
 };
 
 export const subscribeProducts = (callback: (products: AdminProduct[]) => void) => {

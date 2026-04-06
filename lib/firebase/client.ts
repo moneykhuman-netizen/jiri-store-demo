@@ -1,6 +1,7 @@
 "use client";
 
 import { getApp, getApps, initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseEnvPresence = {
@@ -33,8 +34,9 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const auth = getAuth(app);
 const db = getFirestore(app);
 
 console.log("[Hero Firebase][client] Firebase app/db initialized successfully");
 
-export { app, db };
+export { app, auth, db };

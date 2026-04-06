@@ -13,16 +13,21 @@ export function initProductsSync() {
 
   void (async () => {
     try {
-      const [{ doc, getDoc }, { db }] = await Promise.all([
+      const [{ doc, getDoc }, { auth, db }] = await Promise.all([
         import("firebase/firestore"),
         import("@/lib/firebase/client"),
       ]);
       const productsDocRef = doc(db, "siteContent", "products");
       const snapshot = await getDoc(productsDocRef);
 
-      if (!snapshot.exists()) {
-        await saveProducts(useAdminStore.getState().products);
-      }
+      const seedProductsIfMissing = async () => {
+        if (!snapshot.exists()) {
+          if (!auth.currentUser) return;
+          await saveProducts(useAdminStore.getState().products);
+        }
+      };
+
+      await seedProductsIfMissing();
 
       subscribeProducts((products) => {
         setProductsFromRemote(products);

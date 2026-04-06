@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, X, Save, Package } from "lucide-react";
+import { ArrowLeft, Search, Edit, X, Save, Package, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { QUICK_SELECT_SIZES, getTotalSizeStock, type ProductSizeStock } from "@/lib/product-inventory";
 
@@ -419,26 +419,50 @@ export default function EditProductPage() {
               </div>
 
               <div className="space-y-3">
-                <Label>Colors</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Colors</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {currentColors.length} option{currentColors.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 {currentColors.length > 0 && (
                   <div className="space-y-2">
                     {currentColors.map((color, index) => (
-                      <div key={`edit-color-${index}`} className="flex gap-2">
-                        <Input
-                          value={color}
-                          onChange={(e) => updateColor(index, e.target.value)}
-                          placeholder={`Color ${index + 1}`}
-                        />
+                      <div
+                        key={`edit-color-${index}`}
+                        className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex items-center gap-3 sm:flex-1">
+                          <div
+                            className="h-3 w-3 rounded-full border border-border bg-muted"
+                            aria-hidden="true"
+                          />
+                          <Input
+                            value={color}
+                            onChange={(e) => updateColor(index, e.target.value)}
+                            placeholder={`Color ${index + 1}`}
+                            className="sm:flex-1"
+                          />
+                        </div>
                         <Button
                           type="button"
-                          variant="ghost"
-                          size="icon"
+                          variant="outline"
                           onClick={() => removeColor(index)}
+                          className="sm:self-stretch"
+                          aria-label={`Remove color ${color || index + 1}`}
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Remove
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {currentColors.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                    No color options are configured for this product right now. You can save with no colors
+                    or add a new one below.
                   </div>
                 )}
 
@@ -467,6 +491,20 @@ export default function EditProductPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-video-url">Product Video URL (optional)</Label>
+                <Input
+                  id="edit-video-url"
+                  type="url"
+                  placeholder="https://example.com/product-video.mp4"
+                  value={formData.videoUrl ?? ""}
+                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep the product image-only.
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useAdminStore } from "@/lib/admin-store";
+import { useAdminAuth } from "@/components/admin/admin-auth-provider";
 import {
   LayoutDashboard,
   Package,
@@ -17,8 +17,8 @@ import {
   DollarSign,
   LogOut,
   Menu,
-  X,
   ChevronRight,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -58,13 +58,19 @@ const navItems = [
     href: "/admin/inventory",
     icon: DollarSign,
   },
+  {
+    title: "Manage Reviews",
+    href: "/admin/reviews",
+    icon: Star,
+  },
 ];
 
 function NavContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const logout = useAdminStore((state) => state.logout);
+  const { signOut } = useAdminAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(["Products"]);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const toggleExpanded = (title: string) => {
     setExpandedItems((prev) =>
@@ -74,9 +80,17 @@ function NavContent({ onClose }: { onClose?: () => void }) {
     );
   };
 
-  const handleLogout = () => {
-    logout();
-    router.push("/admin");
+  const handleLogout = async () => {
+    setIsSigningOut(true);
+
+    try {
+      await signOut();
+      router.replace("/admin/login");
+    } catch (error) {
+      console.error("Failed to sign out from Firebase Auth:", error);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
@@ -182,9 +196,10 @@ function NavContent({ onClose }: { onClose?: () => void }) {
           variant="ghost"
           className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}
+          disabled={isSigningOut}
         >
           <LogOut className="w-5 h-5" />
-          Sign Out
+          {isSigningOut ? "Signing Out..." : "Sign Out"}
         </Button>
       </div>
     </div>

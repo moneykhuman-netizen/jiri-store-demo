@@ -18,6 +18,7 @@ export interface Product {
   sizeInventory?: ProductSizeStock[];
   colors: string[];
   images: string[];
+  videoUrl?: string;
   description: string;
   features: string[];
   inStock: boolean;
@@ -46,6 +47,15 @@ export const normalizeProductImages = (images: unknown): string[] => {
     : [];
 
   return normalizedImages.length > 0 ? normalizedImages : [DEFAULT_PRODUCT_IMAGE];
+};
+
+export const normalizeProductVideoUrl = (videoUrl: unknown): string | undefined => {
+  if (typeof videoUrl !== "string") {
+    return undefined;
+  }
+
+  const trimmedVideoUrl = videoUrl.trim();
+  return trimmedVideoUrl.length > 0 ? trimmedVideoUrl : undefined;
 };
 
 export const getPrimaryProductImage = (product: { images?: unknown }) =>
