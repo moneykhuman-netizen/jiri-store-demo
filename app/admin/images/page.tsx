@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAdminStore } from "@/lib/admin-store";
+import { uploadProductImage } from "@/lib/firebase/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,9 +17,30 @@ export default function ImagesPage() {
 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [uploadInputKey, setUploadInputKey] = useState(0);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const selectedProduct = products.find((p) => p.id === selectedProductId);
+
+  const clearUploadInput = () => {
+    setSelectedUploadFile(null);
+    setUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const showSuccessMessage = (message: string) => {
+    setErrorMessage("");
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(""), 3000);
+  };
+
+  const showErrorMessage = (message: string) => {
+    setSuccessMessage("");
+    setErrorMessage(message);
+    setTimeout(() => setErrorMessage(""), 4000);
+  };
 
   const handleAddImage = () => {
     if (selectedProduct && newImageUrl.trim()) {
@@ -26,23 +48,20 @@ export default function ImagesPage() {
       const updatedImages = [...selectedProduct.images, trimmedImageUrl];
       updateProductImages(selectedProductId, updatedImages);
       setNewImageUrl("");
-      setSuccessMessage("Image added successfully!");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      showSuccessMessage("Image added successfully!");
     }
   };
 
   const handleRemoveImage = (index: number) => {
     if (selectedProduct) {
       if (selectedProduct.images.length <= 1) {
-        setSuccessMessage("At least one product image is required.");
-        setTimeout(() => setSuccessMessage(""), 3000);
+        showErrorMessage("At least one product image is required.");
         return;
       }
 
       const updatedImages = selectedProduct.images.filter((_, i) => i !== index);
       updateProductImages(selectedProductId, updatedImages);
-      setSuccessMessage("Image removed successfully!");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      showSuccessMessage("Image removed successfully!");
     }
   };
 
@@ -52,8 +71,58 @@ export default function ImagesPage() {
       const [removed] = updatedImages.splice(index, 1);
       updatedImages.unshift(removed);
       updateProductImages(selectedProductId, updatedImages);
-      setSuccessMessage("Primary image updated successfully!");
-      setTimeout(() => setSuccessMessage(""), 3000);
+      showSuccessMessage("Primary image updated successfully!");
+    }
+  };
+
+  const handleUploadFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0] ?? null;
+
+    if (!nextFile) {
+      setSelectedUploadFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("image/")) {
+      clearUploadInput();
+      showErrorMessage("Please choose an image file.");
+      return;
+    }
+
+    setErrorMessage("");
+    setSelectedUploadFile(nextFile);
+  };
+
+  const handleUploadImage = async () => {
+    if (!selectedProduct || !selectedUploadFile || isUploadingImage) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setSuccessMessage("");
+    setErrorMessage("");
+
+    try {
+      const uploadedImageUrl = await uploadProductImage(
+        selectedUploadFile,
+        selectedProductId
+      );
+      const currentProduct = useAdminStore
+        .getState()
+        .products.find((product) => product.id === selectedProductId);
+      const updatedImages = [
+        ...(currentProduct?.images ?? selectedProduct.images),
+        uploadedImageUrl,
+      ];
+
+      updateProductImages(selectedProductId, updatedImages);
+      clearUploadInput();
+      showSuccessMessage("Image uploaded successfully!");
+    } catch (error) {
+      console.error("Failed to upload product image:", error);
+      showErrorMessage("We couldn't upload that image right now. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -158,12 +227,19 @@ export default function ImagesPage() {
           <Card>
             <CardHeader>
               <CardTitle>Add New Image</CardTitle>
-              <CardDescription>Enter an image URL to add to this product</CardDescription>
+              <CardDescription>
+                Enter an image URL or upload a file to add to this product
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {successMessage && (
                 <div className="bg-green-50 text-green-700 px-4 py-2 rounded-lg text-sm">
                   {successMessage}
+                </div>
+              )}
+              {errorMessage && (
+                <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+                  {errorMessage}
                 </div>
               )}
               <div className="flex gap-3">
@@ -180,6 +256,26 @@ export default function ImagesPage() {
                 <Button onClick={handleAddImage} disabled={!newImageUrl.trim()}>
                   <ImagePlus className="w-4 h-4 mr-2" />
                   Add Image
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div className="flex-1">
+                  <Label htmlFor="imageUpload" className="sr-only">Upload Image File</Label>
+                  <Input
+                    key={uploadInputKey}
+                    id="imageUpload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadFileChange}
+                    disabled={isUploadingImage}
+                  />
+                </div>
+                <Button
+                  onClick={handleUploadImage}
+                  disabled={!selectedUploadFile || isUploadingImage}
+                >
+                  <ImagePlus className="w-4 h-4 mr-2" />
+                  {isUploadingImage ? "Uploading..." : "Upload Image"}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
