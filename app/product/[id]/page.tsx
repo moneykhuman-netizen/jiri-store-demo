@@ -620,7 +620,7 @@ export default function ProductPage({
             <div>
               <h2 className="text-xl font-semibold text-foreground">Customer Reviews</h2>
               <p className="text-sm text-muted-foreground mt-2">
-                Ratings shown here are calculated from approved reviews only.
+                Ratings based on customer reviews
               </p>
             </div>
 
@@ -638,8 +638,8 @@ export default function ProductPage({
                   <RatingStars rating={averageRating} iconClassName="h-5 w-5" />
                   <p className="text-sm text-muted-foreground">
                     {approvedReviewCount === 1
-                      ? "Based on 1 approved review."
-                      : `Based on ${approvedReviewCount.toLocaleString()} approved reviews.`}
+                      ? "1 customer review"
+                      : `${approvedReviewCount.toLocaleString()} customer reviews`}
                   </p>
                 </>
               )}
@@ -660,7 +660,7 @@ export default function ProductPage({
               <div>
                 <h2 className="text-xl font-semibold text-foreground">What Customers Say</h2>
                 <p className="text-sm text-muted-foreground">
-                  Approved reviews appear here automatically.
+                  See what our customers are saying
                 </p>
               </div>
               {!isReviewsLoading && approvedReviewCount > 0 && (
@@ -683,7 +683,7 @@ export default function ProductPage({
               <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
                 <h3 className="text-lg font-medium text-foreground">No reviews yet</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Share your experience with this product to help the next shopper.
+                  Be the first to share your experience.
                 </p>
               </div>
             ) : (
