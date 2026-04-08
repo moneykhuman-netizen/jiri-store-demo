@@ -1,17 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Edit,
+  ExternalLink,
+  Film,
+  ImagePlus,
+  Package,
+  Save,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useAdminStore, type AdminProduct } from "@/lib/admin-store";
+import { saveProducts } from "@/lib/firebase/products";
+import { uploadProductImage, uploadProductVideo } from "@/lib/firebase/storage";
+import {
+  QUICK_SELECT_SIZES,
+  getTotalSizeStock,
+  type ProductSizeStock,
+} from "@/lib/product-inventory";
+import {
+  getActionFeedbackClassName,
+  getActionFeedbackLabel,
+  useActionFeedback,
+} from "@/hooks/use-action-feedback";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Search, Edit, X, Save, Package, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { QUICK_SELECT_SIZES, getTotalSizeStock, type ProductSizeStock } from "@/lib/product-inventory";
+import { Textarea } from "@/components/ui/textarea";
+
+const ADD_IMAGE_LABELS = {
+  idle: "Add Image",
+  running: "Adding...",
+  success: "Added ✓",
+  error: "Retry",
+};
+
+const UPLOAD_IMAGE_LABELS = {
+  idle: "Upload Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const UPLOAD_VIDEO_LABELS = {
+  idle: "Upload Video",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const SAVE_PRODUCT_LABELS = {
+  idle: "Save Changes",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
 
 export default function EditProductPage() {
   const products = useAdminStore((state) => state.products);
@@ -25,14 +89,71 @@ export default function EditProductPage() {
   const [newSize, setNewSize] = useState("");
   const [newSizeStock, setNewSizeStock] = useState("1");
   const [newColor, setNewColor] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [imageUploadInputKey, setImageUploadInputKey] = useState(0);
+  const [videoUploadInputKey, setVideoUploadInputKey] = useState(0);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const hasHandledRouteProductRef = useRef(false);
+  const { statuses, setStatus, resetStatus, runAction } = useActionFeedback({
+    addImage: "idle",
+    uploadImage: "idle",
+    uploadVideo: "idle",
+    saveProduct: "idle",
+  });
 
   const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchQuery.toLowerCase())
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.brand.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const currentSizeInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
   const currentColors = formData.colors ?? editingProduct?.colors ?? [];
+  const currentImages = formData.images ?? editingProduct?.images ?? [];
+  const currentVideoUrl =
+    typeof formData.videoUrl === "string"
+      ? formData.videoUrl
+      : editingProduct?.videoUrl ?? "";
+
+  const clearImageUploadInput = () => {
+    setSelectedImageFile(null);
+    setImageUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const clearVideoUploadInput = () => {
+    setSelectedVideoFile(null);
+    setVideoUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const resetEditorState = () => {
+    setNewSize("");
+    setNewSizeStock("1");
+    setNewColor("");
+    setNewImageUrl("");
+    clearImageUploadInput();
+    clearVideoUploadInput();
+    setMediaError(null);
+    setSaveError(null);
+    setStatus("addImage", "idle");
+    setStatus("uploadImage", "idle");
+    setStatus("uploadVideo", "idle");
+    setStatus("saveProduct", "idle");
+  };
+
+  const patchFormData = (
+    updates:
+      | Partial<AdminProduct>
+      | ((current: Partial<AdminProduct>) => Partial<AdminProduct>)
+  ) => {
+    resetStatus("saveProduct");
+    setSaveError(null);
+    setFormData((current) => ({
+      ...current,
+      ...(typeof updates === "function" ? updates(current) : updates),
+    }));
+  };
 
   const openEditDialog = (product: AdminProduct) => {
     setEditingProduct(product);
@@ -41,56 +162,95 @@ export default function EditProductPage() {
       sizes: [...product.sizes],
       sizeInventory: product.sizeInventory.map((entry) => ({ ...entry })),
       colors: [...product.colors],
+      images: [...product.images],
+      videoUrl: product.videoUrl ?? "",
     });
-    setNewSize("");
-    setNewSizeStock("1");
-    setNewColor("");
+    resetEditorState();
   };
 
   const closeEditDialog = () => {
     setEditingProduct(null);
     setFormData({});
-    setNewSize("");
-    setNewSizeStock("1");
-    setNewColor("");
+    resetEditorState();
   };
 
-  const handleSave = () => {
-    if (editingProduct && formData) {
-      // Calculate discount
-      const price = formData.price || 0;
-      const originalPrice = formData.originalPrice || price;
-      const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
-      const sizeInventory = formData.sizeInventory ?? editingProduct.sizeInventory;
-      const stock =
-        formData.sizeInventory !== undefined
-          ? getTotalSizeStock(sizeInventory)
-          : formData.stock ?? editingProduct.stock;
-      const inStock = sizeInventory.some((entry) => entry.stock > 0);
+  useEffect(() => {
+    if (hasHandledRouteProductRef.current || typeof window === "undefined") {
+      return;
+    }
 
-      updateProduct(editingProduct.id, {
-        ...formData,
-        discount,
-        sizes: sizeInventory.map((entry) => entry.size),
-        sizeInventory,
-        colors: formData.colors ?? editingProduct.colors,
-        stock,
-        inStock,
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedProductId = searchParams.get("productId");
+
+    if (!requestedProductId) {
+      hasHandledRouteProductRef.current = true;
+      return;
+    }
+
+    const requestedProduct = products.find((product) => product.id === requestedProductId);
+    if (!requestedProduct) {
+      hasHandledRouteProductRef.current = true;
+      return;
+    }
+
+    openEditDialog(requestedProduct);
+    setSearchQuery(requestedProduct.name);
+    window.history.replaceState(window.history.state, "", window.location.pathname);
+    hasHandledRouteProductRef.current = true;
+  }, [products]);
+
+  const handleSave = async () => {
+    if (!editingProduct) {
+      return;
+    }
+
+    setSaveError(null);
+
+    try {
+      await runAction("saveProduct", async () => {
+        const price = formData.price || 0;
+        const originalPrice = formData.originalPrice || price;
+        const discount =
+          originalPrice > price
+            ? Math.round(((originalPrice - price) / originalPrice) * 100)
+            : 0;
+        const sizeInventory = formData.sizeInventory ?? editingProduct.sizeInventory;
+        const stock =
+          formData.sizeInventory !== undefined
+            ? getTotalSizeStock(sizeInventory)
+            : formData.stock ?? editingProduct.stock;
+        const inStock = sizeInventory.some((entry) => entry.stock > 0);
+
+        updateProduct(editingProduct.id, {
+          ...formData,
+          discount,
+          sizes: sizeInventory.map((entry) => entry.size),
+          sizeInventory,
+          colors: formData.colors ?? editingProduct.colors,
+          images: currentImages,
+          videoUrl: currentVideoUrl,
+          stock,
+          inStock,
+        });
+
+        await saveProducts(useAdminStore.getState().products);
+        closeEditDialog();
       });
-      closeEditDialog();
+    } catch (error) {
+      console.error("Failed to save edited product:", error);
+      setSaveError("We couldn't save those product changes right now. Please try again.");
     }
   };
 
   const syncSizeInventory = (sizeInventory: ProductSizeStock[]) => {
     const normalizedInventory = [...sizeInventory].sort((a, b) => a.size - b.size);
 
-    setFormData((prev) => ({
-      ...prev,
+    patchFormData({
       sizes: normalizedInventory.map((entry) => entry.size),
       sizeInventory: normalizedInventory,
       stock: getTotalSizeStock(normalizedInventory),
       inStock: normalizedInventory.some((entry) => entry.stock > 0),
-    }));
+    });
   };
 
   const updateSizeStock = (size: number, stockValue: string) => {
@@ -139,43 +299,187 @@ export default function EditProductPage() {
       return;
     }
 
-    const currentColors = formData.colors ?? editingProduct?.colors ?? [];
-    if (currentColors.some((color) => color.toLowerCase() === trimmedColor.toLowerCase())) {
+    const existingColors = formData.colors ?? editingProduct?.colors ?? [];
+    if (existingColors.some((color) => color.toLowerCase() === trimmedColor.toLowerCase())) {
       return;
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      colors: [...(prev.colors ?? editingProduct?.colors ?? []), trimmedColor],
+    patchFormData((current) => ({
+      colors: [...(current.colors ?? editingProduct?.colors ?? []), trimmedColor],
     }));
     setNewColor("");
   };
 
   const updateColor = (index: number, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      colors: (prev.colors ?? editingProduct?.colors ?? []).map((color, colorIndex) =>
+    patchFormData((current) => ({
+      colors: (current.colors ?? editingProduct?.colors ?? []).map((color, colorIndex) =>
         colorIndex === index ? value : color
       ),
     }));
   };
 
   const removeColor = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      colors: (prev.colors ?? editingProduct?.colors ?? []).filter(
+    patchFormData((current) => ({
+      colors: (current.colors ?? editingProduct?.colors ?? []).filter(
         (_, colorIndex) => colorIndex !== index
       ),
     }));
   };
 
+  const handleAddImage = async () => {
+    try {
+      await runAction("addImage", () => {
+        const trimmedImageUrl = newImageUrl.trim();
+
+        if (!trimmedImageUrl) {
+          throw new Error("Enter an image URL before adding it.");
+        }
+
+        if (currentImages.includes(trimmedImageUrl)) {
+          throw new Error("That image URL is already attached to this product.");
+        }
+
+        patchFormData((current) => ({
+          images: [...(current.images ?? editingProduct?.images ?? []), trimmedImageUrl],
+        }));
+        setMediaError(null);
+        setNewImageUrl("");
+      });
+    } catch (error) {
+      setMediaError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't add that image right now. Please try again."
+      );
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    if (currentImages.length <= 1) {
+      setMediaError("At least one product image is required.");
+      return;
+    }
+
+    patchFormData((current) => ({
+      images: (current.images ?? editingProduct?.images ?? []).filter(
+        (_, imageIndex) => imageIndex !== index
+      ),
+    }));
+    setMediaError(null);
+  };
+
+  const handleSetPrimaryImage = (index: number) => {
+    if (index <= 0) {
+      return;
+    }
+
+    patchFormData((current) => {
+      const nextImages = [...(current.images ?? editingProduct?.images ?? [])];
+      const [selectedImage] = nextImages.splice(index, 1);
+      nextImages.unshift(selectedImage);
+      return { images: nextImages };
+    });
+    setMediaError(null);
+  };
+
+  const handleImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("uploadImage");
+    setMediaError(null);
+
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setSelectedImageFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("image/")) {
+      clearImageUploadInput();
+      setMediaError("Please choose an image file.");
+      return;
+    }
+
+    setSelectedImageFile(nextFile);
+  };
+
+  const handleVideoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("uploadVideo");
+    setMediaError(null);
+
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setSelectedVideoFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("video/")) {
+      clearVideoUploadInput();
+      setMediaError("Please choose a video file.");
+      return;
+    }
+
+    setSelectedVideoFile(nextFile);
+  };
+
+  const handleUploadImage = async () => {
+    if (!editingProduct || !selectedImageFile) {
+      return;
+    }
+
+    try {
+      await runAction("uploadImage", async () => {
+        const nextImageUrl = await uploadProductImage(selectedImageFile, editingProduct.id);
+
+        patchFormData((current) => ({
+          images: [...(current.images ?? editingProduct.images), nextImageUrl],
+        }));
+        clearImageUploadInput();
+        setMediaError(null);
+      });
+    } catch (error) {
+      console.error("Failed to upload product image:", error);
+      setMediaError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't upload that image right now. Please try again."
+      );
+    }
+  };
+
+  const handleUploadVideo = async () => {
+    if (!editingProduct || !selectedVideoFile) {
+      return;
+    }
+
+    try {
+      await runAction("uploadVideo", async () => {
+        const nextVideoUrl = await uploadProductVideo(selectedVideoFile, editingProduct.id);
+
+        patchFormData({ videoUrl: nextVideoUrl });
+        clearVideoUploadInput();
+        setMediaError(null);
+      });
+    } catch (error) {
+      console.error("Failed to upload product video:", error);
+      setMediaError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't upload that video right now. Please try again."
+      );
+    }
+  };
+
+  const handleClearVideo = () => {
+    patchFormData({ videoUrl: "" });
+    resetStatus("uploadVideo");
+    setMediaError(null);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
         <div>
@@ -184,22 +488,20 @@ export default function EditProductPage() {
         </div>
       </div>
 
-      {/* Search */}
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by product name or brand..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
               className="pl-10"
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Products List */}
       <Card>
         <CardHeader>
           <CardTitle>Products ({filteredProducts.length})</CardTitle>
@@ -207,8 +509,8 @@ export default function EditProductPage() {
         </CardHeader>
         <CardContent>
           {filteredProducts.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <div className="py-12 text-center">
+              <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">No products found</p>
             </div>
           ) : (
@@ -216,14 +518,14 @@ export default function EditProductPage() {
               {filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
                 >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <Package className="w-6 h-6 text-muted-foreground" />
+                  <div className="flex min-w-0 flex-1 items-center gap-4">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Package className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium truncate">{product.name}</p>
+                      <p className="truncate font-medium">{product.name}</p>
                       <p className="text-sm text-muted-foreground">
                         {product.brand} • {product.category} • Rs {product.price.toLocaleString()}
                       </p>
@@ -235,7 +537,7 @@ export default function EditProductPage() {
                     onClick={() => openEditDialog(product)}
                     className="ml-4 flex-shrink-0"
                   >
-                    <Edit className="w-4 h-4 mr-2" />
+                    <Edit className="mr-2 h-4 w-4" />
                     Edit
                   </Button>
                 </div>
@@ -245,38 +547,35 @@ export default function EditProductPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
       <Dialog open={!!editingProduct} onOpenChange={(open) => !open && closeEditDialog()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Product</DialogTitle>
-            <DialogDescription>
-              Update the product details below
-            </DialogDescription>
+            <DialogDescription>Update the product details below</DialogDescription>
           </DialogHeader>
 
-          {editingProduct && (
-            <div className="space-y-4 py-4">
-              <div className="grid sm:grid-cols-2 gap-4">
+          {editingProduct ? (
+            <div className="space-y-6 py-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Product Name</Label>
                   <Input
                     value={formData.name || ""}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(event) => patchFormData({ name: event.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Brand</Label>
                   <Select
                     value={formData.brand}
-                    onValueChange={(value) => setFormData({ ...formData, brand: value })}
+                    onValueChange={(value) => patchFormData({ brand: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {brands
-                        .filter((b) => b)
+                        .filter(Boolean)
                         .map((brand) => (
                           <SelectItem key={brand} value={brand}>
                             {brand}
@@ -287,12 +586,14 @@ export default function EditProductPage() {
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Category</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) => setFormData({ ...formData, category: value as "men" | "women" })}
+                    onValueChange={(value) =>
+                      patchFormData({ category: value as "men" | "women" })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -307,7 +608,7 @@ export default function EditProductPage() {
                   <Label>Type</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value) => setFormData({ ...formData, type: value })}
+                    onValueChange={(value) => patchFormData({ type: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -315,7 +616,7 @@ export default function EditProductPage() {
                     <SelectContent>
                       {formData.category &&
                         categories[formData.category]
-                          .filter((t) => t)
+                          .filter(Boolean)
                           .map((type) => (
                             <SelectItem key={type} value={type}>
                               {type}
@@ -326,13 +627,15 @@ export default function EditProductPage() {
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-3 gap-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Selling Price (Rs)</Label>
                   <Input
                     type="number"
                     value={formData.price || ""}
-                    onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) || 0 })}
+                    onChange={(event) =>
+                      patchFormData({ price: parseInt(event.target.value, 10) || 0 })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -340,7 +643,11 @@ export default function EditProductPage() {
                   <Input
                     type="number"
                     value={formData.originalPrice || ""}
-                    onChange={(e) => setFormData({ ...formData, originalPrice: parseInt(e.target.value) || 0 })}
+                    onChange={(event) =>
+                      patchFormData({
+                        originalPrice: parseInt(event.target.value, 10) || 0,
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -348,10 +655,13 @@ export default function EditProductPage() {
                   <Input
                     type="number"
                     value={formData.stock || ""}
-                    onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+                    onChange={(event) =>
+                      patchFormData({ stock: parseInt(event.target.value, 10) || 0 })
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
-                    Editing total stock keeps the legacy flow working. Per-size stock below controls actual availability.
+                    Editing total stock keeps the legacy flow working. Per-size stock below
+                    controls actual availability.
                   </p>
                 </div>
               </div>
@@ -376,7 +686,7 @@ export default function EditProductPage() {
                           type="number"
                           min={0}
                           value={entry.stock}
-                          onChange={(e) => updateSizeStock(entry.size, e.target.value)}
+                          onChange={(event) => updateSizeStock(entry.size, event.target.value)}
                           className="w-28"
                         />
                         <Button
@@ -386,7 +696,7 @@ export default function EditProductPage() {
                           onClick={() => removeSize(entry.size)}
                           className="ml-auto"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ))}
@@ -403,14 +713,14 @@ export default function EditProductPage() {
                     min={1}
                     placeholder="Add size"
                     value={newSize}
-                    onChange={(e) => setNewSize(e.target.value)}
+                    onChange={(event) => setNewSize(event.target.value)}
                   />
                   <Input
                     type="number"
                     min={0}
                     placeholder="Stock"
                     value={newSizeStock}
-                    onChange={(e) => setNewSizeStock(e.target.value)}
+                    onChange={(event) => setNewSizeStock(event.target.value)}
                   />
                   <Button type="button" variant="outline" onClick={addSize}>
                     Add Size
@@ -425,7 +735,8 @@ export default function EditProductPage() {
                     {currentColors.length} option{currentColors.length === 1 ? "" : "s"}
                   </span>
                 </div>
-                {currentColors.length > 0 && (
+
+                {currentColors.length > 0 ? (
                   <div className="space-y-2">
                     {currentColors.map((color, index) => (
                       <div
@@ -439,7 +750,7 @@ export default function EditProductPage() {
                           />
                           <Input
                             value={color}
-                            onChange={(e) => updateColor(index, e.target.value)}
+                            onChange={(event) => updateColor(index, event.target.value)}
                             placeholder={`Color ${index + 1}`}
                             className="sm:flex-1"
                           />
@@ -457,12 +768,10 @@ export default function EditProductPage() {
                       </div>
                     ))}
                   </div>
-                )}
-
-                {currentColors.length === 0 && (
+                ) : (
                   <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    No color options are configured for this product right now. You can save with no colors
-                    or add a new one below.
+                    No color options are configured for this product right now. You can save with
+                    no colors or add a new one below.
                   </div>
                 )}
 
@@ -470,10 +779,10 @@ export default function EditProductPage() {
                   <Input
                     placeholder="Add custom color"
                     value={newColor}
-                    onChange={(e) => setNewColor(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
+                    onChange={(event) => setNewColor(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
                         addColor();
                       }
                     }}
@@ -488,37 +797,215 @@ export default function EditProductPage() {
                 <Label>Description</Label>
                 <Textarea
                   value={formData.description || ""}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(event) => patchFormData({ description: event.target.value })}
                   rows={3}
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-video-url">Product Video URL (optional)</Label>
-                <Input
-                  id="edit-video-url"
-                  type="url"
-                  placeholder="https://example.com/product-video.mp4"
-                  value={formData.videoUrl ?? ""}
-                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to keep the product image-only.
-                </p>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <Label>Product Media</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Keep URL fallback support, add Storage uploads, and preserve the first image as
+                    the primary product image.
+                  </p>
+                </div>
+
+                {mediaError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {mediaError}
+                  </div>
+                ) : null}
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Images ({currentImages.length})</p>
+                    <span className="text-xs text-muted-foreground">
+                      Image 1 stays primary unless you choose a different primary image below.
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {currentImages.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="space-y-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
+                          <img
+                            src={image}
+                            alt={`Product image ${index + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          {index === 0 ? (
+                            <div className="absolute left-2 top-2 rounded bg-primary px-2 py-1 text-xs text-primary-foreground">
+                              Primary
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="truncate text-xs text-muted-foreground">{image}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {index > 0 ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSetPrimaryImage(index)}
+                              >
+                                Set Primary
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveImage(index)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              Remove
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={image} target="_blank" rel="noreferrer">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Open
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-lg border border-border p-4">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                      <Input
+                        type="url"
+                        placeholder="https://example.com/product-image.jpg"
+                        value={newImageUrl}
+                        onChange={(event) => {
+                          resetStatus("addImage");
+                          setMediaError(null);
+                          setNewImageUrl(event.target.value);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleAddImage}
+                        disabled={statuses.addImage === "running" || !newImageUrl.trim()}
+                        className={cn(getActionFeedbackClassName(statuses.addImage))}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                        {getActionFeedbackLabel(statuses.addImage, ADD_IMAGE_LABELS)}
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                      <Input
+                        key={imageUploadInputKey}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        disabled={statuses.uploadImage === "running"}
+                      />
+                      <Button
+                        type="button"
+                        onClick={handleUploadImage}
+                        disabled={statuses.uploadImage === "running" || !selectedImageFile}
+                        className={cn(getActionFeedbackClassName(statuses.uploadImage))}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
+                      </Button>
+                    </div>
+
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Uploads are wired for Firebase Storage and still end up as plain image URL
+                      strings in the product data.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-video-url">Product Video (optional)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Keep the existing URL field, or upload a video to Storage and use its URL.
+                      </p>
+                    </div>
+                    {currentVideoUrl ? (
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={currentVideoUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open Video
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <Input
+                    id="edit-video-url"
+                    type="url"
+                    placeholder="https://example.com/product-video.mp4"
+                    value={currentVideoUrl}
+                    onChange={(event) => {
+                      resetStatus("uploadVideo");
+                      setMediaError(null);
+                      patchFormData({ videoUrl: event.target.value });
+                    }}
+                    className="mt-3"
+                  />
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      key={videoUploadInputKey}
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoFileChange}
+                      disabled={statuses.uploadVideo === "running"}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleUploadVideo}
+                      disabled={statuses.uploadVideo === "running" || !selectedVideoFile}
+                      className={cn(getActionFeedbackClassName(statuses.uploadVideo))}
+                    >
+                      <Film className="h-4 w-4" />
+                      {getActionFeedbackLabel(statuses.uploadVideo, UPLOAD_VIDEO_LABELS)}
+                    </Button>
+                  </div>
+
+                  {currentVideoUrl ? (
+                    <div className="mt-3">
+                      <Button type="button" variant="outline" onClick={handleClearVideo}>
+                        Remove Video
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
+              {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
+
+              <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={closeEditDialog}>
-                  <X className="w-4 h-4 mr-2" />
+                  <X className="mr-2 h-4 w-4" />
                   Cancel
                 </Button>
-                <Button onClick={handleSave}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Changes
+                <Button
+                  onClick={handleSave}
+                  disabled={statuses.saveProduct === "running"}
+                  className={cn(getActionFeedbackClassName(statuses.saveProduct))}
+                >
+                  <Save className="h-4 w-4" />
+                  {getActionFeedbackLabel(statuses.saveProduct, SAVE_PRODUCT_LABELS)}
                 </Button>
               </div>
             </div>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

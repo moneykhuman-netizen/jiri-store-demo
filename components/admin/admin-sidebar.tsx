@@ -13,7 +13,6 @@ import {
   Trash2,
   Tags,
   FolderTree,
-  ImagePlus,
   DollarSign,
   LogOut,
   Menu,
@@ -53,11 +52,6 @@ const navItems = [
     title: "Manage Categories",
     href: "/admin/categories",
     icon: FolderTree,
-  },
-  {
-    title: "Upload Images",
-    href: "/admin/images",
-    icon: ImagePlus,
   },
   {
     title: "Price & Stock",

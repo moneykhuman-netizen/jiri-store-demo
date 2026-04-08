@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Edit3, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Edit3, ImagePlus, Save, Trash2, Upload } from "lucide-react";
 import {
   CATEGORY_CARD_LINKS,
   FeaturedCollectionSettings,
@@ -19,6 +19,15 @@ import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
 import { saveHeroSlidesToFirebase } from "@/lib/firebase/hero";
 import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
 import { savePromoBannerToFirebase } from "@/lib/firebase/promo";
+import {
+  uploadHomepageCategoryImage,
+  uploadHomepageHeroImage,
+} from "@/lib/firebase/storage";
+import {
+  getActionFeedbackClassName,
+  getActionFeedbackLabel,
+  useActionFeedback,
+} from "@/hooks/use-action-feedback";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,6 +48,42 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+const HERO_SUBMIT_LABELS = {
+  idle: "Add Slide",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
+
+const HERO_UPDATE_LABELS = {
+  idle: "Update Slide",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
+
+const HERO_UPLOAD_LABELS = {
+  idle: "Upload Hero Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const CATEGORY_UPLOAD_LABELS = {
+  idle: "Upload Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const SAVE_LABELS = {
+  idle: "Save",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
 
 const createEmptySlide = (section: HeroSection = "women"): HeroSlide => ({
   id: "",
@@ -82,6 +127,33 @@ export default function HomepageSettingsPage() {
   );
   const [promoForm, setPromoForm] = useState<PromoBanner>(promo);
   const [socialForm, setSocialForm] = useState<SocialLinks>(social);
+  const [slideUploadFile, setSlideUploadFile] = useState<File | null>(null);
+  const [slideUploadInputKey, setSlideUploadInputKey] = useState(0);
+  const [slideActionError, setSlideActionError] = useState<string | null>(null);
+  const [categoryActionError, setCategoryActionError] = useState<string | null>(null);
+  const [categoryUploadFiles, setCategoryUploadFiles] = useState<
+    Record<HeroSection, File | null>
+  >({
+    men: null,
+    women: null,
+  });
+  const [categoryUploadInputKeys, setCategoryUploadInputKeys] = useState<
+    Record<HeroSection, number>
+  >({
+    men: 0,
+    women: 0,
+  });
+  const { statuses, setStatus, resetStatus, runAction } = useActionFeedback({
+    heroSubmit: "idle",
+    heroImageUpload: "idle",
+    categoriesSubmit: "idle",
+    featuredSubmit: "idle",
+    newArrivalsSubmit: "idle",
+    promoSubmit: "idle",
+    socialSubmit: "idle",
+    categoryMenUpload: "idle",
+    categoryWomenUpload: "idle",
+  });
   const availableProductIds = new Set(products.map((product) => product.id));
 
   useEffect(() => {
@@ -96,13 +168,57 @@ export default function HomepageSettingsPage() {
     setNewArrivalsForm(newArrivalsCollection);
   }, [newArrivalsCollection]);
 
+  const clearSlideUploadInput = () => {
+    setSlideUploadFile(null);
+    setSlideUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const clearCategoryUploadInput = (section: HeroSection) => {
+    setCategoryUploadFiles((current) => ({
+      ...current,
+      [section]: null,
+    }));
+    setCategoryUploadInputKeys((current) => ({
+      ...current,
+      [section]: current[section] + 1,
+    }));
+  };
+
+  const updateSlideForm = (updates: Partial<HeroSlide>) => {
+    resetStatus("heroSubmit");
+    setSlideActionError(null);
+    setSlideForm((current) => ({
+      ...current,
+      ...updates,
+    }));
+  };
+
+  const updateCategoryForm = (
+    section: HeroSection,
+    updates: Partial<HomepageCategoryCard>
+  ) => {
+    resetStatus("categoriesSubmit");
+    setCategoryActionError(null);
+    setCategoryForms((current) => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        ...updates,
+      },
+    }));
+  };
+
   const resetSlideForm = (section: HeroSection = slideForm.section) => {
     setSlideForm(createEmptySlide(section));
     setSlideImageError(null);
     setEditingSlide(null);
+    setSlideActionError(null);
+    clearSlideUploadInput();
+    setStatus("heroImageUpload", "idle");
+    setStatus("heroSubmit", "idle");
   };
 
-  const handleSlideSubmit = (e: React.FormEvent) => {
+  const handleSlideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const image = slideForm.image.trim();
 
@@ -113,32 +229,71 @@ export default function HomepageSettingsPage() {
 
     const nextSlide = {
       ...slideForm,
+      id: slideForm.id || editingSlide?.id || Date.now().toString(),
       image,
     };
+    const wasEditingSlide = Boolean(editingSlide);
 
-    if (editingSlide) {
-      updateHeroSlide(nextSlide);
-    } else {
-      addHeroSlide({ ...nextSlide, id: Date.now().toString() });
+    try {
+      await runAction("heroSubmit", async () => {
+        if (wasEditingSlide) {
+          updateHeroSlide(nextSlide);
+        } else {
+          addHeroSlide(nextSlide);
+        }
+
+        const latestSlides = useAdminStore.getState().heroSlides;
+        await saveHeroSlidesToFirebase(latestSlides);
+        resetSlideForm(nextSlide.section);
+      });
+    } catch (error) {
+      console.error("Failed to save hero slides to Firebase:", error);
+      setSlideActionError("We couldn't save that hero slide right now. Please try again.");
+      setEditingSlide(nextSlide);
+      setSlideForm(nextSlide);
+    }
+  };
+
+  const handleSlideImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("heroImageUpload");
+    setSlideActionError(null);
+
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setSlideUploadFile(null);
+      return;
     }
 
-    const latestSlides = useAdminStore.getState().heroSlides;
-    resetSlideForm(nextSlide.section);
+    if (!nextFile.type.startsWith("image/")) {
+      clearSlideUploadInput();
+      setSlideActionError("Please choose an image file for the hero slide.");
+      return;
+    }
 
-    console.log("[Hero Firebase][admin] Local Hero slide save succeeded", {
-      latestSlidesLength: latestSlides.length,
-    });
-    console.log("[Hero Firebase][admin] Starting remote Firebase write for Hero slides", {
-      latestSlidesLength: latestSlides.length,
-    });
+    setSlideUploadFile(nextFile);
+  };
 
-    void (async () => {
-      try {
-        await saveHeroSlidesToFirebase(latestSlides);
-      } catch (error) {
-        console.error("Failed to save hero slides to Firebase:", error);
-      }
-    })();
+  const handleSlideImageUpload = async () => {
+    if (!slideUploadFile) {
+      return;
+    }
+
+    try {
+      await runAction("heroImageUpload", async () => {
+        const uploadedImageUrl = await uploadHomepageHeroImage(
+          slideUploadFile,
+          slideForm.section,
+          slideForm.id || editingSlide?.id
+        );
+
+        updateSlideForm({ image: uploadedImageUrl });
+        setSlideImageError(null);
+        clearSlideUploadInput();
+      });
+    } catch (error) {
+      console.error("Failed to upload hero image:", error);
+      setSlideActionError("We couldn't upload that hero image right now. Please try again.");
+    }
   };
 
   const handleDeleteSlide = (id: string) => {
@@ -167,71 +322,139 @@ export default function HomepageSettingsPage() {
 
   const handlePromoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updatePromo(promoForm);
-    await savePromoBannerToFirebase(promoForm);
+
+    try {
+      await runAction("promoSubmit", async () => {
+        updatePromo(promoForm);
+        await savePromoBannerToFirebase(promoForm);
+      });
+    } catch (error) {
+      console.error("Failed to save promo banner to Firebase:", error);
+    }
   };
 
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateHomepageCategory(categoryForms.men);
-    updateHomepageCategory(categoryForms.women);
-    await saveHomepageCategoriesToFirebase({
-      men: categoryForms.men,
-      women: categoryForms.women,
-    });
+
+    try {
+      await runAction("categoriesSubmit", async () => {
+        updateHomepageCategory(categoryForms.men);
+        updateHomepageCategory(categoryForms.women);
+        await saveHomepageCategoriesToFirebase({
+          men: categoryForms.men,
+          women: categoryForms.women,
+        });
+      });
+    } catch (error) {
+      console.error("Failed to save homepage categories to Firebase:", error);
+      setCategoryActionError("We couldn't save those category cards right now. Please try again.");
+    }
   };
 
-  const handleFeaturedSubmit = (e: React.FormEvent) => {
+  const handleFeaturedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    updateFeaturedCollection({
-      ...featuredForm,
-      title: featuredForm.title.trim(),
-      description: featuredForm.description.trim(),
-      productIds: featuredForm.productIds.filter(
-        (productId, index, productIds) =>
-          availableProductIds.has(productId) && productIds.indexOf(productId) === index
-      ),
-    });
+    try {
+      await runAction("featuredSubmit", async () => {
+        updateFeaturedCollection({
+          ...featuredForm,
+          title: featuredForm.title.trim(),
+          description: featuredForm.description.trim(),
+          productIds: featuredForm.productIds.filter(
+            (productId, index, productIds) =>
+              availableProductIds.has(productId) &&
+              productIds.indexOf(productId) === index
+          ),
+        });
 
-    const latestFeaturedCollection = useAdminStore.getState().featuredCollection;
-
-    void (async () => {
-      try {
+        const latestFeaturedCollection = useAdminStore.getState().featuredCollection;
         await saveFeaturedCollectionToFirebase(latestFeaturedCollection);
-      } catch (error) {
-        console.error("Failed to save featured collection to Firebase:", error);
-      }
-    })();
+      });
+    } catch (error) {
+      console.error("Failed to save featured collection to Firebase:", error);
+    }
   };
 
-  const handleSocialSubmit = (e: React.FormEvent) => {
+  const handleSocialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSocial(socialForm);
+
+    try {
+      await runAction("socialSubmit", () => {
+        updateSocial(socialForm);
+      });
+    } catch (error) {
+      console.error("Failed to save social links locally:", error);
+    }
   };
 
-  const handleNewArrivalsSubmit = (e: React.FormEvent) => {
+  const handleNewArrivalsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    updateNewArrivalsCollection({
-      ...newArrivalsForm,
-      title: newArrivalsForm.title.trim(),
-      description: newArrivalsForm.description.trim(),
-      productIds: newArrivalsForm.productIds.filter(
-        (productId, index, productIds) =>
-          availableProductIds.has(productId) && productIds.indexOf(productId) === index
-      ),
-    });
+    try {
+      await runAction("newArrivalsSubmit", async () => {
+        updateNewArrivalsCollection({
+          ...newArrivalsForm,
+          title: newArrivalsForm.title.trim(),
+          description: newArrivalsForm.description.trim(),
+          productIds: newArrivalsForm.productIds.filter(
+            (productId, index, productIds) =>
+              availableProductIds.has(productId) &&
+              productIds.indexOf(productId) === index
+          ),
+        });
 
-    const latestNewArrivalsCollection = useAdminStore.getState().newArrivalsCollection;
-
-    void (async () => {
-      try {
+        const latestNewArrivalsCollection = useAdminStore.getState().newArrivalsCollection;
         await saveNewArrivalsCollectionToFirebase(latestNewArrivalsCollection);
-      } catch (error) {
-        console.error("Failed to save new arrivals collection to Firebase:", error);
+      });
+    } catch (error) {
+      console.error("Failed to save new arrivals collection to Firebase:", error);
+    }
+  };
+
+  const handleCategoryImageFileChange =
+    (section: HeroSection) => (event: ChangeEvent<HTMLInputElement>) => {
+      resetStatus(section === "men" ? "categoryMenUpload" : "categoryWomenUpload");
+      setCategoryActionError(null);
+
+      const nextFile = event.target.files?.[0] ?? null;
+      if (!nextFile) {
+        setCategoryUploadFiles((current) => ({
+          ...current,
+          [section]: null,
+        }));
+        return;
       }
-    })();
+
+      if (!nextFile.type.startsWith("image/")) {
+        clearCategoryUploadInput(section);
+        setCategoryActionError("Please choose an image file for the category card.");
+        return;
+      }
+
+      setCategoryUploadFiles((current) => ({
+        ...current,
+        [section]: nextFile,
+      }));
+    };
+
+  const handleCategoryImageUpload = async (section: HeroSection) => {
+    const actionKey = section === "men" ? "categoryMenUpload" : "categoryWomenUpload";
+    const nextFile = categoryUploadFiles[section];
+
+    if (!nextFile) {
+      return;
+    }
+
+    try {
+      await runAction(actionKey, async () => {
+        const uploadedImageUrl = await uploadHomepageCategoryImage(nextFile, section);
+        updateCategoryForm(section, { image: uploadedImageUrl });
+        clearCategoryUploadInput(section);
+      });
+    } catch (error) {
+      console.error(`Failed to upload ${section} category image:`, error);
+      setCategoryActionError("We couldn't upload that category image right now. Please try again.");
+    }
   };
 
   const validFeaturedProductIds = featuredForm.productIds.filter(
@@ -302,6 +525,9 @@ export default function HomepageSettingsPage() {
                             setEditingSlide(slide);
                             setSlideForm({ ...slide });
                             setSlideImageError(null);
+                            setSlideActionError(null);
+                            setStatus("heroSubmit", "idle");
+                            setStatus("heroImageUpload", "idle");
                           }}
                         >
                           <Edit3 className="h-4 w-4" />
@@ -333,9 +559,7 @@ export default function HomepageSettingsPage() {
               <CardContent className="space-y-4">
                 <Select
                   value={slideForm.section}
-                  onValueChange={(value: HeroSection) =>
-                    setSlideForm({ ...slideForm, section: value })
-                  }
+                  onValueChange={(value: HeroSection) => updateSlideForm({ section: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select section" />
@@ -349,34 +573,26 @@ export default function HomepageSettingsPage() {
                 <Input
                   placeholder="Badge"
                   value={slideForm.badge}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, badge: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ badge: e.target.value })}
                 />
 
                 <Input
                   placeholder="Title"
                   value={slideForm.title}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, title: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ title: e.target.value })}
                 />
 
                 <Textarea
                   placeholder="Description"
                   rows={2}
                   value={slideForm.description}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, description: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ description: e.target.value })}
                 />
 
                 <Input
                   placeholder="Button Text"
                   value={slideForm.buttonText}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, buttonText: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ buttonText: e.target.value })}
                 />
 
                 <p className="text-sm text-muted-foreground">
@@ -389,14 +605,35 @@ export default function HomepageSettingsPage() {
                   aria-invalid={Boolean(slideImageError)}
                   onChange={(e) => {
                     const image = e.target.value;
-                    setSlideForm({ ...slideForm, image });
+                    updateSlideForm({ image });
                     if (slideImageError && image.trim()) {
                       setSlideImageError(null);
                     }
                   }}
                 />
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <Input
+                    key={slideUploadInputKey}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSlideImageFileChange}
+                    disabled={statuses.heroImageUpload === "running"}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSlideImageUpload}
+                    disabled={statuses.heroImageUpload === "running" || !slideUploadFile}
+                    className={cn(getActionFeedbackClassName(statuses.heroImageUpload))}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {getActionFeedbackLabel(statuses.heroImageUpload, HERO_UPLOAD_LABELS)}
+                  </Button>
+                </div>
                 {slideImageError ? (
                   <p className="text-sm text-destructive">{slideImageError}</p>
+                ) : null}
+                {slideActionError ? (
+                  <p className="text-sm text-destructive">{slideActionError}</p>
                 ) : null}
               </CardContent>
             </Card>
@@ -411,8 +648,16 @@ export default function HomepageSettingsPage() {
                   Cancel
                 </Button>
               )}
-              <Button type="submit">
-                {editingSlide ? "Update Slide" : "Add Slide"}
+              <Button
+                type="submit"
+                disabled={statuses.heroSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.heroSubmit))}
+              >
+                <ImagePlus className="h-4 w-4" />
+                {getActionFeedbackLabel(
+                  statuses.heroSubmit,
+                  editingSlide ? HERO_UPDATE_LABELS : HERO_SUBMIT_LABELS
+                )}
               </Button>
             </div>
           </form>
@@ -448,67 +693,82 @@ export default function HomepageSettingsPage() {
                       <Input
                         placeholder="Top Label (optional)"
                         value={card.label}
-                        onChange={(e) =>
-                          setCategoryForms((prev) => ({
-                            ...prev,
-                            [section]: {
-                              ...prev[section],
-                              label: e.target.value,
-                            },
-                          }))
-                        }
+                        onChange={(e) => updateCategoryForm(section, { label: e.target.value })}
                       />
 
                       <Input
                         placeholder="Title"
                         value={card.title}
-                        onChange={(e) =>
-                          setCategoryForms((prev) => ({
-                            ...prev,
-                            [section]: {
-                              ...prev[section],
-                              title: e.target.value,
-                            },
-                          }))
-                        }
+                        onChange={(e) => updateCategoryForm(section, { title: e.target.value })}
                       />
 
                       <Input
                         placeholder="Subtitle / Description"
                         value={card.description}
                         onChange={(e) =>
-                          setCategoryForms((prev) => ({
-                            ...prev,
-                            [section]: {
-                              ...prev[section],
-                              description: e.target.value,
-                            },
-                          }))
+                          updateCategoryForm(section, { description: e.target.value })
                         }
                       />
 
                       <Input
                         placeholder="Image URL"
                         value={card.image}
-                        onChange={(e) =>
-                          setCategoryForms((prev) => ({
-                            ...prev,
-                            [section]: {
-                              ...prev[section],
-                              image: e.target.value,
-                            },
-                          }))
-                        }
+                        onChange={(e) => updateCategoryForm(section, { image: e.target.value })}
                       />
+
+                      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                        <Input
+                          key={categoryUploadInputKeys[section]}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleCategoryImageFileChange(section)}
+                          disabled={
+                            statuses[section === "men" ? "categoryMenUpload" : "categoryWomenUpload"] ===
+                            "running"
+                          }
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => handleCategoryImageUpload(section)}
+                          disabled={
+                            statuses[section === "men" ? "categoryMenUpload" : "categoryWomenUpload"] ===
+                              "running" || !categoryUploadFiles[section]
+                          }
+                          className={cn(
+                            getActionFeedbackClassName(
+                              statuses[
+                                section === "men" ? "categoryMenUpload" : "categoryWomenUpload"
+                              ]
+                            )
+                          )}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {getActionFeedbackLabel(
+                            statuses[
+                              section === "men" ? "categoryMenUpload" : "categoryWomenUpload"
+                            ],
+                            CATEGORY_UPLOAD_LABELS
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
               </CardContent>
             </Card>
 
+            {categoryActionError ? (
+              <p className="text-sm text-destructive">{categoryActionError}</p>
+            ) : null}
+
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save Category Cards
+              <Button
+                type="submit"
+                disabled={statuses.categoriesSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.categoriesSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.categoriesSubmit, SAVE_LABELS)} Category Cards`}
               </Button>
             </div>
           </form>
@@ -614,8 +874,13 @@ export default function HomepageSettingsPage() {
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save Featured Collection
+              <Button
+                type="submit"
+                disabled={statuses.featuredSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.featuredSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.featuredSubmit, SAVE_LABELS)} Featured Collection`}
               </Button>
             </div>
           </form>
@@ -721,8 +986,13 @@ export default function HomepageSettingsPage() {
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save New Arrivals
+              <Button
+                type="submit"
+                disabled={statuses.newArrivalsSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.newArrivalsSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.newArrivalsSubmit, SAVE_LABELS)} New Arrivals`}
               </Button>
             </div>
           </form>
@@ -768,8 +1038,13 @@ export default function HomepageSettingsPage() {
               </CardContent>
             </Card>
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save Promo
+              <Button
+                type="submit"
+                disabled={statuses.promoSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.promoSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.promoSubmit, SAVE_LABELS)} Promo`}
               </Button>
             </div>
           </form>
@@ -807,8 +1082,13 @@ export default function HomepageSettingsPage() {
               </CardContent>
             </Card>
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save Links
+              <Button
+                type="submit"
+                disabled={statuses.socialSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.socialSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.socialSubmit, SAVE_LABELS)} Links`}
               </Button>
             </div>
           </form>
