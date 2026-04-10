@@ -167,7 +167,9 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
             <div className="space-y-4">
               <Slider
                 value={priceRange}
-                onValueChange={setPriceRange}
+                onValueChange={(value) =>
+                  setPriceRange([value[0] ?? 0, value[1] ?? 20000])
+                }
                 max={20000}
                 min={0}
                 step={500}
@@ -286,14 +288,16 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
                 <AccordionTrigger className="text-sm font-medium">Price Range</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4">
-                    <Slider
-                      value={priceRange}
-                      onValueChange={setPriceRange}
-                      max={20000}
-                      min={0}
-                      step={500}
-                      className="w-full"
-                    />
+                  <Slider
+                    value={priceRange}
+                    onValueChange={(value) =>
+                      setPriceRange([value[0] ?? 0, value[1] ?? 20000])
+                    }
+                    max={20000}
+                    min={0}
+                    step={500}
+                    className="w-full"
+                  />
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                       <span>Rs {priceRange[0].toLocaleString()}</span>
                       <span>Rs {priceRange[1].toLocaleString()}</span>

@@ -17,6 +17,16 @@ export interface Product {
   inStock: boolean;
   isFeatured: boolean;
   isNew: boolean;
+  stock?: number;
+  sizeInventory?: ProductSizeInventory[];
+  videoUrl?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface ProductSizeInventory {
+  size: number;
+  stock: number;
 }
 
 export const brands = [

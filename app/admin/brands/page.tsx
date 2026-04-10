@@ -43,9 +43,9 @@ export default function BrandsPage() {
     setError("");
   };
 
-  const handleDeleteBrand = () => {
+  const handleDeleteBrand = async () => {
     if (brandToDelete) {
-      removeBrand(brandToDelete);
+      await removeBrand(brandToDelete);
       setBrandToDelete(null);
     }
   };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAdminStore, type AdminProduct } from "@/lib/admin-store";
+import { useAdminStore, type Product } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,9 +56,17 @@ export default function AddProductPage() {
   const [isFeatured, setIsFeatured] = useState(false);
   const [isNew, setIsNew] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError("");
+
+    if (selectedSizes.length === 0) {
+      setSubmitError("Select at least one size so stock can be allocated correctly.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const price = parseInt(formData.price) || 0;
@@ -66,7 +74,7 @@ export default function AddProductPage() {
     const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
     const stockVal = parseInt(formData.stock) || 0;
-    const newProduct: AdminProduct = {
+    const newProduct: Product = {
       id: `p${Date.now()}`,
       name: formData.name,
       brand: formData.brand,
@@ -88,10 +96,16 @@ export default function AddProductPage() {
       stock: stockVal,
     };
 
-    addProduct(newProduct);
-    
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    router.push("/admin/products/edit");
+    try {
+      await addProduct(newProduct);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      router.push("/admin/products/edit");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to save the product right now."
+      );
+      setIsSubmitting(false);
+    }
   };
 
   const addFeature = () => {
@@ -421,6 +435,12 @@ export default function AddProductPage() {
         </Card>
 
         {/* Submit */}
+        {submitError && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {submitError}
+          </div>
+        )}
+
         <div className="flex gap-3 justify-end">
           <Link href="/admin/dashboard">
             <Button type="button" variant="outline">

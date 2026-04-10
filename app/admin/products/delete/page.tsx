@@ -35,9 +35,9 @@ export default function DeleteProductPage() {
     ? products.find((p) => p.id === productToDelete)
     : null;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (productToDelete) {
-      deleteProduct(productToDelete);
+      await deleteProduct(productToDelete);
       setProductToDelete(null);
     }
   };

@@ -20,29 +20,29 @@ export default function ImagesPage() {
 
   const selectedProduct = products.find((p) => p.id === selectedProductId);
 
-  const handleAddImage = () => {
+  const handleAddImage = async () => {
     if (selectedProduct && newImageUrl.trim()) {
       const updatedImages = [...selectedProduct.images, newImageUrl.trim()];
-      updateProduct(selectedProductId, { images: updatedImages });
+      await updateProduct(selectedProductId, { images: updatedImages });
       setNewImageUrl("");
       setSuccessMessage("Image added successfully!");
       setTimeout(() => setSuccessMessage(""), 3000);
     }
   };
 
-  const handleRemoveImage = (index: number) => {
+  const handleRemoveImage = async (index: number) => {
     if (selectedProduct) {
       const updatedImages = selectedProduct.images.filter((_, i) => i !== index);
-      updateProduct(selectedProductId, { images: updatedImages });
+      await updateProduct(selectedProductId, { images: updatedImages });
     }
   };
 
-  const handleSetPrimary = (index: number) => {
+  const handleSetPrimary = async (index: number) => {
     if (selectedProduct && index > 0) {
       const updatedImages = [...selectedProduct.images];
       const [removed] = updatedImages.splice(index, 1);
       updatedImages.unshift(removed);
-      updateProduct(selectedProductId, { images: updatedImages });
+      await updateProduct(selectedProductId, { images: updatedImages });
     }
   };
 

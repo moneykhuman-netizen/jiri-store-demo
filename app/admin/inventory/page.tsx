@@ -35,21 +35,17 @@ export default function InventoryPage() {
     setSavedIds((prev) => prev.filter((id) => id !== productId));
   };
 
-  const handleSave = (productId: string) => {
+  const handleSave = async (productId: string) => {
     const updates = editedValues[productId];
     if (updates) {
       const product = products.find((p) => p.id === productId);
       if (product) {
         const newPrice = updates.price ?? product.price;
         const newStock = updates.stock ?? product.stock;
-        const discount = product.originalPrice > newPrice
-          ? Math.round(((product.originalPrice - newPrice) / product.originalPrice) * 100)
-          : 0;
-        
-        updateProduct(productId, {
+
+        await updateProduct(productId, {
           price: newPrice,
           stock: newStock,
-          discount,
         });
       }
       setSavedIds((prev) => [...prev, productId]);

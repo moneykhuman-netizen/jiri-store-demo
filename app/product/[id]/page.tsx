@@ -56,6 +56,9 @@ export default function ProductPage({
   const relatedProducts = products
     .filter((p) => p.category === product.category && p.id !== product.id)
     .slice(0, 4);
+  const stockBySize = new Map<number, number>(
+    product.sizeInventory.map((entry) => [entry.size, entry.stock] as const)
+  );
 
   const generateWhatsAppLink = () => {
     const message = encodeURIComponent(
@@ -240,19 +243,27 @@ export default function ProductPage({
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {product.sizes.map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => setSelectedSize(size)}
-                    className={`w-12 h-12 rounded-lg border text-sm font-medium transition-all ${
-                      selectedSize === size
-                        ? "border-accent bg-accent text-accent-foreground"
-                        : "border-border hover:border-ring text-foreground"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+                {product.sizes.map((size) => {
+                  const availableStock = stockBySize.get(size) ?? (product.inStock ? 1 : 0);
+                  const sizeOutOfStock = availableStock <= 0;
+
+                  return (
+                    <button
+                      key={size}
+                      onClick={() => !sizeOutOfStock && setSelectedSize(size)}
+                      disabled={sizeOutOfStock}
+                      className={`w-12 h-12 rounded-lg border text-sm font-medium transition-all ${
+                        selectedSize === size
+                          ? "border-accent bg-accent text-accent-foreground"
+                          : sizeOutOfStock
+                            ? "border-border text-muted-foreground opacity-50 cursor-not-allowed"
+                            : "border-border hover:border-ring text-foreground"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

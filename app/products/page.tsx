@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -14,6 +14,7 @@ import Link from "next/link";
 function ProductsContent() {
   const searchParams = useSearchParams();
   const products = useAdminStore((state) => state.products);
+  const [visibleCount, setVisibleCount] = useState(8);
   
   const category = searchParams.get("category") as "men" | "women" | null;
   const brand = searchParams.get("brand");
@@ -55,6 +56,27 @@ function ProductsContent() {
     return result;
   }, [category, brand, type, size, minPrice, maxPrice, search, products]);
 
+  const sortedProducts = useMemo(
+    () =>
+      [...filteredProducts].sort((left, right) => {
+        if (left.isNew && !right.isNew) return -1;
+        if (!left.isNew && right.isNew) return 1;
+        if (left.isFeatured && !right.isFeatured) return -1;
+        if (!left.isFeatured && right.isFeatured) return 1;
+        return 0;
+      }),
+    [filteredProducts]
+  );
+
+  const visibleProducts = useMemo(
+    () => sortedProducts.slice(0, visibleCount),
+    [sortedProducts, visibleCount]
+  );
+
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [sortedProducts]);
+
   const pageTitle = search
     ? `Search Results for "${search}"`
     : category
@@ -69,7 +91,7 @@ function ProductsContent() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Filters Sidebar */}
           <aside className="lg:w-64 flex-shrink-0">
-            <ProductFilters currentCategory={category} />
+            <ProductFilters currentCategory={category ?? undefined} />
           </aside>
 
           {/* Products Grid */}
@@ -79,11 +101,11 @@ function ProductsContent() {
                 {pageTitle}
               </h1>
               <span className="text-sm text-muted-foreground">
-                {filteredProducts.length} products
+                {sortedProducts.length} products
               </span>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <div className="text-center py-16">
                 <h2 className="text-xl font-semibold mb-2">No products found</h2>
                 <p className="text-muted-foreground mb-6">
@@ -94,11 +116,21 @@ function ProductsContent() {
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {visibleProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+
+                {visibleCount < sortedProducts.length && (
+                  <div className="mt-8 flex justify-center">
+                    <Button onClick={() => setVisibleCount((count) => count + 8)}>
+                      Load More
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

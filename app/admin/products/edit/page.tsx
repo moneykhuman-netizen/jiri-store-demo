@@ -21,6 +21,8 @@ export default function EditProductPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
   const [formData, setFormData] = useState<Partial<AdminProduct>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const filteredProducts = products.filter(
     (p) =>
@@ -31,26 +33,30 @@ export default function EditProductPage() {
   const openEditDialog = (product: AdminProduct) => {
     setEditingProduct(product);
     setFormData({ ...product });
+    setSaveError("");
   };
 
   const closeEditDialog = () => {
     setEditingProduct(null);
     setFormData({});
+    setSaveError("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editingProduct && formData) {
-      // Calculate discount
-      const price = formData.price || 0;
-      const originalPrice = formData.originalPrice || price;
-      const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+      setIsSaving(true);
+      setSaveError("");
 
-      // ensure stock/inStock values are explicit
-      const stock = formData.stock ?? editingProduct.stock;
-      const inStock = stock > 0;
-
-      updateProduct(editingProduct.id, { ...formData, discount, stock, inStock });
-      closeEditDialog();
+      try {
+        await updateProduct(editingProduct.id, formData);
+        closeEditDialog();
+      } catch (error) {
+        setSaveError(
+          error instanceof Error ? error.message : "Unable to save changes right now."
+        );
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -247,14 +253,20 @@ export default function EditProductPage() {
                 />
               </div>
 
+              {saveError && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {saveError}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" onClick={closeEditDialog}>
                   <X className="w-4 h-4 mr-2" />
                   Cancel
                 </Button>
-                <Button onClick={handleSave}>
+                <Button onClick={handleSave} disabled={isSaving}>
                   <Save className="w-4 h-4 mr-2" />
-                  Save Changes
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </div>

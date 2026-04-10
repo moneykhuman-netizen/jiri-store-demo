@@ -3,20 +3,28 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Product } from "@/lib/products";
+import { products as initialProducts } from "./products";
+import {
+  createProductDocument,
+  deleteProductDocument,
+  deleteProductsByIds,
+  updateProductDocument,
+} from "@/lib/firebase/products";
+import {
+  normalizeLegacySeedProduct,
+  sortProductsForStore,
+  type NormalizedProduct,
+} from "@/lib/product-normalization";
 
 // re-export so components can still import from this module
 export type { Product };
 
-// Admin credentials (in a real app, this would be server-side)
 const ADMIN_CREDENTIALS = {
   username: "admin",
   password: "jiri2024",
 };
 
-export interface AdminProduct extends Product {
-  id: string;
-  stock: number;
-}
+export type AdminProduct = NormalizedProduct;
 
 export interface HeroSlide {
   id: string;
@@ -41,16 +49,21 @@ export interface SocialLinks {
   whatsapp: string;
 }
 
+interface CategoryState {
+  men: string[];
+  women: string[];
+}
+
 interface AdminState {
   isAuthenticated: boolean;
   products: AdminProduct[];
   brands: string[];
-  categories: { men: string[]; women: string[] };
-  // homepage settings
+  categories: CategoryState;
+  manualBrands: string[];
+  manualCategories: CategoryState;
   heroSlides: HeroSlide[];
   promoBanner: PromoBanner;
   socialLinks: SocialLinks;
-  // legacy single banner (mirrored from first slide)
   heroBanner: {
     badge: string;
     title: string;
@@ -61,62 +74,88 @@ interface AdminState {
   };
   login: (username: string, password: string) => boolean;
   logout: () => void;
-  addProduct: (product: AdminProduct) => void;
-  updateProduct: (id: string, updates: Partial<AdminProduct>) => void;
-  deleteProduct: (id: string) => void;
+  setProductsFromRemote: (products: AdminProduct[]) => void;
+  addProduct: (product: Product) => Promise<AdminProduct>;
+  updateProduct: (id: string, updates: Partial<AdminProduct>) => Promise<AdminProduct | null>;
+  deleteProduct: (id: string) => Promise<void>;
   addBrand: (brand: string) => void;
-  removeBrand: (brand: string) => void;
+  removeBrand: (brand: string) => Promise<void>;
   addCategory: (gender: "men" | "women", category: string) => void;
   removeCategory: (gender: "men" | "women", category: string) => void;
-  // homepage actions
   addHeroSlide: (slide: HeroSlide) => void;
   updateHeroSlide: (slide: HeroSlide) => void;
   deleteHeroSlide: (id: string) => void;
   updatePromoBanner: (banner: PromoBanner) => void;
   updateSocialLinks: (links: SocialLinks) => void;
-  // legacy (kept for compatibility but not used anymore)
-  updateHeroBanner: (banner: any) => void;
+  updateHeroBanner: (banner: unknown) => void;
 }
 
-// Convert existing products to AdminProducts with stock
-import { products as initialProducts, brands as initialBrands, types as initialTypes } from "./products";
+const mergeUniqueStrings = (values: string[]): string[] =>
+  Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean))
+  ).sort((left, right) => left.localeCompare(right));
 
-const initialAdminProducts: AdminProduct[] = initialProducts.map((p) => {
-  const stock = Math.floor(Math.random() * 50) + 10;
+const deriveBrandsFromProducts = (products: AdminProduct[]) =>
+  mergeUniqueStrings(products.map((product) => product.brand));
+
+const deriveCategoriesFromProducts = (products: AdminProduct[]): CategoryState => {
+  const menCategories = products
+    .filter((product) => product.category === "men")
+    .map((product) => product.type);
+  const womenCategories = products
+    .filter((product) => product.category === "women")
+    .map((product) => product.type);
+
   return {
-    ...p,
-    stock,
-    // derive availability from the assigned stock
-    inStock: stock > 0,
+    men: mergeUniqueStrings(menCategories),
+    women: mergeUniqueStrings(womenCategories),
   };
-});
-
-// Calculate initial brands and categories from products
-const brandSet = new Set<string>();
-const menTypes = new Set<string>();
-const womenTypes = new Set<string>();
-initialAdminProducts.forEach(p => {
-  brandSet.add(p.brand);
-  if (p.category === 'men') {
-    menTypes.add(p.type);
-  } else if (p.category === 'women') {
-    womenTypes.add(p.type);
-  }
-});
-const initialBrandsFromProducts = Array.from(brandSet);
-const initialCategoriesFromProducts = {
-  men: Array.from(menTypes),
-  women: Array.from(womenTypes),
 };
+
+const buildCatalogState = (
+  products: AdminProduct[],
+  manualBrands: string[],
+  manualCategories: CategoryState
+) => {
+  const normalizedProducts = sortProductsForStore(products);
+  const derivedBrands = deriveBrandsFromProducts(normalizedProducts);
+  const derivedCategories = deriveCategoriesFromProducts(normalizedProducts);
+
+  return {
+    products: normalizedProducts,
+    brands: mergeUniqueStrings([...manualBrands, ...derivedBrands]),
+    categories: {
+      men: mergeUniqueStrings([...manualCategories.men, ...derivedCategories.men]),
+      women: mergeUniqueStrings([...manualCategories.women, ...derivedCategories.women]),
+    },
+  };
+};
+
+const initialAdminProducts: AdminProduct[] = sortProductsForStore(
+  initialProducts.map((product, index) => normalizeLegacySeedProduct(product, index))
+);
+
+const initialManualBrands: string[] = [];
+const initialManualCategories: CategoryState = {
+  men: [],
+  women: [],
+};
+
+const initialCatalogState = buildCatalogState(
+  initialAdminProducts,
+  initialManualBrands,
+  initialManualCategories
+);
 
 export const useAdminStore = create<AdminState>()(
   persist(
     (set, get) => ({
       isAuthenticated: false,
-      products: initialAdminProducts,
-      brands: initialBrandsFromProducts,
-      categories: initialCategoriesFromProducts,
-      // initialize heroSlides with single default slide for previous banner
+      products: initialCatalogState.products,
+      brands: initialCatalogState.brands,
+      categories: initialCatalogState.categories,
+      manualBrands: initialManualBrands,
+      manualCategories: initialManualCategories,
       heroSlides: [
         {
           id: Date.now().toString(),
@@ -163,181 +202,129 @@ export const useAdminStore = create<AdminState>()(
         set({ isAuthenticated: false });
       },
 
-      addProduct: (product: AdminProduct) => {
-        set((state) => {
-          // ensure inStock mirrors stock
-          const newProduct = {
-            ...product,
-            inStock: product.stock > 0,
-          };
-          const newProducts = [...state.products, newProduct];
-
-          const brandSet = new Set<string>();
-          newProducts.forEach(p => brandSet.add(p.brand));
-          const updatedBrands = Array.from(brandSet);
-
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          newProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const updatedCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-
-          return {
-            products: newProducts,
-            brands: updatedBrands,
-            categories: updatedCategories,
-          };
-        });
+      setProductsFromRemote: (products: AdminProduct[]) => {
+        set((state) => ({
+          ...buildCatalogState(products, state.manualBrands, state.manualCategories),
+        }));
       },
 
-      updateProduct: (id: string, updates: Partial<AdminProduct>) => {
-        set((state) => {
-          const updatedProducts = state.products.map((p) => {
-            if (p.id !== id) return p;
-            const merged = { ...p, ...updates };
-            // always sync availability based on final stock value
-            merged.inStock = merged.stock > 0;
-            return merged;
-          });
-          const brandSet = new Set<string>();
-          updatedProducts.forEach(p => brandSet.add(p.brand));
-          const updatedBrands = Array.from(brandSet);
-
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          updatedProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const updatedCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-
-          return {
-            products: updatedProducts,
-            brands: updatedBrands,
-            categories: updatedCategories,
-          };
-        });
+      addProduct: async (product: Product) => {
+        const savedProduct = await createProductDocument(product);
+        set((state) => ({
+          ...buildCatalogState(
+            [...state.products.filter((item) => item.id !== savedProduct.id), savedProduct],
+            state.manualBrands,
+            state.manualCategories
+          ),
+        }));
+        return savedProduct;
       },
 
-      deleteProduct: (id: string) => {
-        set((state) => {
-          const remainingProducts = state.products.filter((p) => p.id !== id);
+      updateProduct: async (id: string, updates: Partial<AdminProduct>) => {
+        const currentProduct = get().products.find((product) => product.id === id);
+        if (!currentProduct) {
+          return null;
+        }
 
-          // Recalculate brands from remaining products
-          const brandSet = new Set<string>();
-          remainingProducts.forEach(p => brandSet.add(p.brand));
-          const remainingBrands = Array.from(brandSet);
+        const savedProduct = await updateProductDocument(currentProduct, updates);
+        set((state) => ({
+          ...buildCatalogState(
+            state.products.map((product) => (product.id === id ? savedProduct : product)),
+            state.manualBrands,
+            state.manualCategories
+          ),
+        }));
 
-          // Recalculate categories from remaining products
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          remainingProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const remainingCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
+        return savedProduct;
+      },
 
-          return {
-            products: remainingProducts,
-            brands: remainingBrands,
-            categories: remainingCategories,
-          };
-        });
+      deleteProduct: async (id: string) => {
+        await deleteProductDocument(id);
+        set((state) => ({
+          ...buildCatalogState(
+            state.products.filter((product) => product.id !== id),
+            state.manualBrands,
+            state.manualCategories
+          ),
+        }));
       },
 
       addBrand: (brand: string) => {
-        const state = get();
-        if (!state.brands.includes(brand)) {
-          set({ brands: [...state.brands, brand] });
+        const trimmedBrand = brand.trim();
+        if (!trimmedBrand) {
+          return;
         }
+
+        set((state) => {
+          const manualBrands = mergeUniqueStrings([...state.manualBrands, trimmedBrand]);
+          return {
+            manualBrands,
+            ...buildCatalogState(state.products, manualBrands, state.manualCategories),
+          };
+        });
       },
 
-      removeBrand: (brand: string) => {
+      removeBrand: async (brand: string) => {
+        const matchingProducts = get().products.filter((product) => product.brand === brand);
+        if (matchingProducts.length > 0) {
+          await deleteProductsByIds(matchingProducts.map((product) => product.id));
+        }
+
         set((state) => {
-          // Remove all products belonging to this brand
-          const remainingProducts = state.products.filter(p => p.brand !== brand);
-          
-          // Recalculate brands from remaining products
-          const brandSet = new Set<string>();
-          remainingProducts.forEach(p => brandSet.add(p.brand));
-          const remainingBrands = Array.from(brandSet);
-          
-          // Recalculate categories from remaining products
-          const menTypes = new Set<string>();
-          const womenTypes = new Set<string>();
-          remainingProducts.forEach(p => {
-            if (p.category === 'men') {
-              menTypes.add(p.type);
-            } else if (p.category === 'women') {
-              womenTypes.add(p.type);
-            }
-          });
-          const remainingCategories = {
-            men: Array.from(menTypes),
-            women: Array.from(womenTypes),
-          };
-          
+          const remainingProducts = state.products.filter((product) => product.brand !== brand);
+          const manualBrands = state.manualBrands.filter((item) => item !== brand);
+
           return {
-            products: remainingProducts,
-            brands: remainingBrands,
-            categories: remainingCategories,
+            manualBrands,
+            ...buildCatalogState(remainingProducts, manualBrands, state.manualCategories),
           };
         });
       },
 
       addCategory: (gender: "men" | "women", category: string) => {
-        const state = get();
-        if (!state.categories[gender].includes(category)) {
-          set({
-            categories: {
-              ...state.categories,
-              [gender]: [...state.categories[gender], category],
-            },
-          });
+        const trimmedCategory = category.trim();
+        if (!trimmedCategory) {
+          return;
         }
+
+        set((state) => {
+          const manualCategories = {
+            ...state.manualCategories,
+            [gender]: mergeUniqueStrings([...state.manualCategories[gender], trimmedCategory]),
+          };
+
+          return {
+            manualCategories,
+            ...buildCatalogState(state.products, state.manualBrands, manualCategories),
+          };
+        });
       },
 
       removeCategory: (gender: "men" | "women", category: string) => {
-        set((state) => ({
-          categories: {
-            ...state.categories,
-            [gender]: state.categories[gender].filter((c) => c !== category),
-          },
-        }));
+        set((state) => {
+          const manualCategories = {
+            ...state.manualCategories,
+            [gender]: state.manualCategories[gender].filter((item) => item !== category),
+          };
+
+          return {
+            manualCategories,
+            ...buildCatalogState(state.products, state.manualBrands, manualCategories),
+          };
+        });
       },
 
-      // homepage actions
       addHeroSlide: (slide) => {
         set((state) => ({ heroSlides: [...state.heroSlides, slide] }));
       },
       updateHeroSlide: (slide) => {
         set((state) => ({
-          heroSlides: state.heroSlides.map((s) => (s.id === slide.id ? slide : s)),
+          heroSlides: state.heroSlides.map((item) => (item.id === slide.id ? slide : item)),
         }));
       },
       deleteHeroSlide: (id) => {
         set((state) => ({
-          heroSlides: state.heroSlides.filter((s) => s.id !== id),
+          heroSlides: state.heroSlides.filter((item) => item.id !== id),
         }));
       },
       updatePromoBanner: (banner) => {
@@ -347,8 +334,7 @@ export const useAdminStore = create<AdminState>()(
         set({ socialLinks: links });
       },
       updateHeroBanner: (banner) => {
-        // keep for legacy compatibility, no-op or copy to slides
-        set({ heroBanner: banner });
+        set({ heroBanner: banner as AdminState["heroBanner"] });
       },
     }),
     {
@@ -358,10 +344,11 @@ export const useAdminStore = create<AdminState>()(
         products: state.products,
         brands: state.brands,
         categories: state.categories,
+        manualBrands: state.manualBrands,
+        manualCategories: state.manualCategories,
         heroSlides: state.heroSlides,
         promoBanner: state.promoBanner,
         socialLinks: state.socialLinks,
-        // keep heroBanner for backward migration
         heroBanner: state.heroBanner,
       }),
     }
