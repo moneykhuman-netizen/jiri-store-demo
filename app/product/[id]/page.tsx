@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { Footer } from "@/components/footer";
 import { ProductCard } from "@/components/product-card";
 import { useAdminStore } from "@/lib/admin-store";
 import { submitProductReview, subscribeApprovedReviewsForProduct } from "@/lib/firebase/reviews";
+import { adaptProductForStorefront } from "@/lib/products/adaptProductForStorefront";
 import { normalizeProductImages, normalizeProductVideoUrl } from "@/lib/products";
 import {
   calculateAverageRating,
@@ -100,8 +101,15 @@ export default function ProductPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const products = useAdminStore((state) => state.products);
-  const product = products.find((p) => p.id === id);
+  const rawProducts = useAdminStore((state) => state.products);
+  const products = useMemo(
+    () => rawProducts.map(adaptProductForStorefront),
+    [rawProducts]
+  );
+  const product = useMemo(
+    () => products.find((currentProduct) => currentProduct.id === id),
+    [id, products]
+  );
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);

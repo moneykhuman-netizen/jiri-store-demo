@@ -10,14 +10,19 @@ import { useAdminStore } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { getProductSizeNumbers } from "@/lib/product-inventory";
+import { adaptProductForStorefront } from "@/lib/products/adaptProductForStorefront";
 import Link from "next/link";
 
 function ProductsContent() {
   const searchParams = useSearchParams();
-  const allProducts = useAdminStore((state) => state.products);
+  const rawProducts = useAdminStore((state) => state.products);
   const featuredCollection = useAdminStore((state) => state.featuredCollection);
   const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
   const [visibleCount, setVisibleCount] = useState(8);
+  const allProducts = useMemo(
+    () => rawProducts.map(adaptProductForStorefront),
+    [rawProducts]
+  );
 
   const categoryParam = searchParams.get("category")?.toLowerCase();
   const category =
