@@ -23,6 +23,8 @@ export interface SocialLinks {
   facebook: string;
   instagram: string;
   whatsapp: string;
+  youtube: string;
+  telegram: string;
 }
 
 export const BRAND_THEME_OPTIONS = [
@@ -142,6 +144,8 @@ const DEFAULT_SOCIAL_LINKS: SocialLinks = {
   facebook: "",
   instagram: "",
   whatsapp: "",
+  youtube: "",
+  telegram: "",
 };
 
 const DEFAULT_HERO_BANNER: LegacyHeroBanner = {

@@ -3,6 +3,7 @@ import { Inter, Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ManagedCategoriesSyncInit } from '@/components/managed-categories-sync-init'
 import { ProductsSyncInit } from '@/components/products-sync-init'
+import { SocialLinksSyncInit } from '@/components/social-links-sync-init'
 import './globals.css'
 
 const inter = Inter({ 
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body className="font-sans antialiased scroll-smooth">
         <ProductsSyncInit />
         <ManagedCategoriesSyncInit />
+        <SocialLinksSyncInit />
         {children}
         <Analytics />
       </body>

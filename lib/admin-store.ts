@@ -64,7 +64,19 @@ export interface SocialLinks {
   facebook: string;
   instagram: string;
   whatsapp: string;
+  youtube: string;
+  telegram: string;
 }
+
+export const normalizeSocialLinks = (
+  links?: Partial<SocialLinks> | null
+): SocialLinks => ({
+  facebook: typeof links?.facebook === "string" ? links.facebook : "",
+  instagram: typeof links?.instagram === "string" ? links.instagram : "",
+  whatsapp: typeof links?.whatsapp === "string" ? links.whatsapp : "",
+  youtube: typeof links?.youtube === "string" ? links.youtube : "",
+  telegram: typeof links?.telegram === "string" ? links.telegram : "",
+});
 
 export const BRAND_THEME_OPTIONS = [
   "auto",
@@ -593,6 +605,7 @@ interface AdminState {
   ) => void;
   updatePromoBanner: (banner: PromoBanner) => void;
   setPromoBannerFromRemote: (banner: PromoBanner) => void;
+  setSocialLinksFromRemote: (links: Partial<SocialLinks>) => void;
   updateSocialLinks: (links: SocialLinks) => void;
   // legacy (kept for compatibility but not used anymore)
   updateHeroBanner: (banner: any) => void;
@@ -642,11 +655,7 @@ export const useAdminStore = create<AdminState>()(
         description: "Use code STEPSTYLE30 at checkout. Valid for new customers only.",
         code: "STEPSTYLE30",
       },
-      socialLinks: {
-        facebook: "",
-        instagram: "",
-        whatsapp: "",
-      },
+      socialLinks: normalizeSocialLinks(),
       heroBanner: {
         badge: "ELEGANCE REDEFINED",
         title: "Women's Collection",
@@ -1083,8 +1092,11 @@ export const useAdminStore = create<AdminState>()(
       setPromoBannerFromRemote: (banner) => {
         set({ promoBanner: banner });
       },
+      setSocialLinksFromRemote: (links) => {
+        set({ socialLinks: normalizeSocialLinks(links) });
+      },
       updateSocialLinks: (links) => {
-        set({ socialLinks: links });
+        set({ socialLinks: normalizeSocialLinks(links) });
       },
       updateHeroBanner: (banner) => {
         // legacy-only state retained for backward compatibility
@@ -1145,6 +1157,9 @@ export const useAdminStore = create<AdminState>()(
               | Partial<Record<HeroSection, PersistedHomepageCategoryCard>>
               | PersistedHomepageCategoryCard[]
               | undefined
+          ),
+          socialLinks: normalizeSocialLinks(
+            persisted?.socialLinks as Partial<SocialLinks> | undefined
           ),
           heroBanner: currentState.heroBanner,
         };

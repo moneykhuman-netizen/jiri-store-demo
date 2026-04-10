@@ -10,6 +10,7 @@ import {
   HeroSection,
   HeroSlide,
   HomepageCategoryCard,
+  normalizeSocialLinks,
   PromoBanner,
   SocialLinks,
   useAdminStore,
@@ -19,6 +20,7 @@ import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
 import { saveHeroSlidesToFirebase } from "@/lib/firebase/hero";
 import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
 import { savePromoBannerToFirebase } from "@/lib/firebase/promo";
+import { saveSocialLinksToFirebase } from "@/lib/firebase/social";
 import {
   uploadHomepageCategoryImage,
   uploadHomepageHeroImage,
@@ -126,7 +128,7 @@ export default function HomepageSettingsPage() {
     newArrivalsCollection
   );
   const [promoForm, setPromoForm] = useState<PromoBanner>(promo);
-  const [socialForm, setSocialForm] = useState<SocialLinks>(social);
+  const [socialForm, setSocialForm] = useState<SocialLinks>(normalizeSocialLinks(social));
   const [slideUploadFile, setSlideUploadFile] = useState<File | null>(null);
   const [slideUploadInputKey, setSlideUploadInputKey] = useState(0);
   const [slideActionError, setSlideActionError] = useState<string | null>(null);
@@ -167,6 +169,10 @@ export default function HomepageSettingsPage() {
   useEffect(() => {
     setNewArrivalsForm(newArrivalsCollection);
   }, [newArrivalsCollection]);
+
+  useEffect(() => {
+    setSocialForm(normalizeSocialLinks(social));
+  }, [social]);
 
   const clearSlideUploadInput = () => {
     setSlideUploadFile(null);
@@ -379,11 +385,14 @@ export default function HomepageSettingsPage() {
     e.preventDefault();
 
     try {
-      await runAction("socialSubmit", () => {
-        updateSocial(socialForm);
+      await runAction("socialSubmit", async () => {
+        const nextSocialLinks = normalizeSocialLinks(socialForm);
+
+        await saveSocialLinksToFirebase(nextSocialLinks);
+        updateSocial(nextSocialLinks);
       });
     } catch (error) {
-      console.error("Failed to save social links locally:", error);
+      console.error("Failed to save social links to Firebase:", error);
     }
   };
 
@@ -471,36 +480,48 @@ export default function HomepageSettingsPage() {
   const selectedNewArrivalsIds = new Set(validNewArrivalsProductIds);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </Link>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Homepage Settings</h1>
           <p className="text-muted-foreground">Manage homepage content</p>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="hero">Hero Slides</TabsTrigger>
-          <TabsTrigger value="categories">Category Cards</TabsTrigger>
-          <TabsTrigger value="featured">Featured</TabsTrigger>
-          <TabsTrigger value="new-arrivals">New Arrivals</TabsTrigger>
-          <TabsTrigger value="promo">Promo Banner</TabsTrigger>
-          <TabsTrigger value="social">Social Links</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-3 xl:grid-cols-6">
+          <TabsTrigger value="hero" className="w-full whitespace-normal text-center">
+            Hero Slides
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="w-full whitespace-normal text-center">
+            Category Cards
+          </TabsTrigger>
+          <TabsTrigger value="featured" className="w-full whitespace-normal text-center">
+            Featured
+          </TabsTrigger>
+          <TabsTrigger value="new-arrivals" className="w-full whitespace-normal text-center">
+            New Arrivals
+          </TabsTrigger>
+          <TabsTrigger value="promo" className="w-full whitespace-normal text-center">
+            Promo Banner
+          </TabsTrigger>
+          <TabsTrigger value="social" className="w-full whitespace-normal text-center">
+            Social Links
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="hero">
+        <TabsContent value="hero" className="min-w-0">
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Existing Slides</CardTitle>
               <CardDescription>Manage homepage hero slides</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0">
               {slides.length === 0 ? (
                 <p className="text-muted-foreground">No slides added yet</p>
               ) : (
@@ -508,16 +529,16 @@ export default function HomepageSettingsPage() {
                   {slides.map((slide) => (
                     <div
                       key={slide.id}
-                      className="flex items-center justify-between rounded-lg border border-border p-4"
+                      className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div className="flex-1">
-                        <p className="font-semibold">{slide.title || "(no title)"}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words font-semibold">{slide.title || "(no title)"}</p>
                         <p className="text-xs text-muted-foreground">
                           {slide.section === "men" ? "Men" : "Women"} hero
                           {slide.badge ? ` - ${slide.badge}` : ""}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex justify-end gap-2 sm:justify-start">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -556,12 +577,12 @@ export default function HomepageSettingsPage() {
                   Each slide should include image, text and section. CTA routing is fixed by section.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="min-w-0 space-y-4">
                 <Select
                   value={slideForm.section}
                   onValueChange={(value: HeroSection) => updateSlideForm({ section: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full min-w-0 max-w-full">
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent>
@@ -574,12 +595,14 @@ export default function HomepageSettingsPage() {
                   placeholder="Badge"
                   value={slideForm.badge}
                   onChange={(e) => updateSlideForm({ badge: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
 
                 <Input
                   placeholder="Title"
                   value={slideForm.title}
                   onChange={(e) => updateSlideForm({ title: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
 
                 <Textarea
@@ -587,15 +610,17 @@ export default function HomepageSettingsPage() {
                   rows={2}
                   value={slideForm.description}
                   onChange={(e) => updateSlideForm({ description: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
 
                 <Input
                   placeholder="Button Text"
                   value={slideForm.buttonText}
                   onChange={(e) => updateSlideForm({ buttonText: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
 
-                <p className="text-sm text-muted-foreground">
+                <p className="break-all text-sm text-muted-foreground">
                   CTA destination: {HERO_BUTTON_LINKS[slideForm.section]}
                 </p>
 
@@ -610,20 +635,22 @@ export default function HomepageSettingsPage() {
                       setSlideImageError(null);
                     }
                   }}
+                  className="w-full min-w-0 max-w-full"
                 />
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <Input
                     key={slideUploadInputKey}
                     type="file"
                     accept="image/*"
                     onChange={handleSlideImageFileChange}
                     disabled={statuses.heroImageUpload === "running"}
+                    className="w-full min-w-0 max-w-full"
                   />
                   <Button
                     type="button"
                     onClick={handleSlideImageUpload}
                     disabled={statuses.heroImageUpload === "running" || !slideUploadFile}
-                    className={cn(getActionFeedbackClassName(statuses.heroImageUpload))}
+                    className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.heroImageUpload))}
                   >
                     <Upload className="h-4 w-4" />
                     {getActionFeedbackLabel(statuses.heroImageUpload, HERO_UPLOAD_LABELS)}
@@ -638,12 +665,13 @@ export default function HomepageSettingsPage() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {editingSlide && (
                 <Button
                   variant="outline"
                   type="button"
                   onClick={() => resetSlideForm()}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
@@ -651,7 +679,7 @@ export default function HomepageSettingsPage() {
               <Button
                 type="submit"
                 disabled={statuses.heroSubmit === "running"}
-                className={cn(getActionFeedbackClassName(statuses.heroSubmit))}
+                className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.heroSubmit))}
               >
                 <ImagePlus className="h-4 w-4" />
                 {getActionFeedbackLabel(
@@ -1077,6 +1105,20 @@ export default function HomepageSettingsPage() {
                   value={socialForm.whatsapp}
                   onChange={(e) =>
                     setSocialForm({ ...socialForm, whatsapp: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="YouTube URL"
+                  value={socialForm.youtube}
+                  onChange={(e) =>
+                    setSocialForm({ ...socialForm, youtube: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="Telegram URL"
+                  value={socialForm.telegram}
+                  onChange={(e) =>
+                    setSocialForm({ ...socialForm, telegram: e.target.value })
                   }
                 />
               </CardContent>

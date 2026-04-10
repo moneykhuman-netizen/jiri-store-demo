@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -17,6 +17,7 @@ function ProductsContent() {
   const allProducts = useAdminStore((state) => state.products);
   const featuredCollection = useAdminStore((state) => state.featuredCollection);
   const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
+  const [visibleCount, setVisibleCount] = useState(8);
 
   const categoryParam = searchParams.get("category")?.toLowerCase();
   const category =
@@ -29,6 +30,14 @@ function ProductsContent() {
   const search = searchParams.get("search");
   const featured = searchParams.get("featured") === "true";
   const newArrivals = searchParams.get("newArrivals") === "true";
+  const featuredProductIds = useMemo(
+    () => new Set(featuredCollection.productIds),
+    [featuredCollection.productIds]
+  );
+  const newArrivalProductIds = useMemo(
+    () => new Set(newArrivalsCollection.productIds),
+    [newArrivalsCollection.productIds]
+  );
 
   const filteredProducts = useMemo(() => {
     // Always start from the full products backbone, then apply page filters.
@@ -42,11 +51,9 @@ function ProductsContent() {
       : [...allProducts];
 
     if (featured) {
-      const featuredProductIds = new Set(featuredCollection.productIds);
       result = result.filter((p) => featuredProductIds.has(p.id));
     }
     if (newArrivals) {
-      const newArrivalProductIds = new Set(newArrivalsCollection.productIds);
       result = result.filter((p) => newArrivalProductIds.has(p.id));
     }
     if (category) {
@@ -82,9 +89,36 @@ function ProductsContent() {
     featured,
     newArrivals,
     allProducts,
-    featuredCollection.productIds,
-    newArrivalsCollection.productIds,
+    featuredProductIds,
+    newArrivalProductIds,
   ]);
+
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const aIsNewArrival = newArrivalProductIds.has(a.id);
+      const bIsNewArrival = newArrivalProductIds.has(b.id);
+
+      if (aIsNewArrival && !bIsNewArrival) return -1;
+      if (!aIsNewArrival && bIsNewArrival) return 1;
+
+      const aIsFeatured = featuredProductIds.has(a.id);
+      const bIsFeatured = featuredProductIds.has(b.id);
+
+      if (aIsFeatured && !bIsFeatured) return -1;
+      if (!aIsFeatured && bIsFeatured) return 1;
+
+      return 0;
+    });
+  }, [filteredProducts, featuredProductIds, newArrivalProductIds]);
+
+  const visibleProducts = useMemo(
+    () => sortedProducts.slice(0, visibleCount),
+    [sortedProducts, visibleCount]
+  );
+
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [sortedProducts]);
 
   const pageTitle = search
     ? `Search Results for "${search}"`
@@ -114,11 +148,11 @@ function ProductsContent() {
                 {pageTitle}
               </h1>
               <span className="text-sm text-muted-foreground">
-                {filteredProducts.length} products
+                {sortedProducts.length} products
               </span>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <div className="text-center py-16">
                 <h2 className="text-xl font-semibold mb-2">No products found</h2>
                 <p className="text-muted-foreground mb-6">
@@ -129,11 +163,24 @@ function ProductsContent() {
                 </Link>
               </div>
             ) : (
-              <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {visibleProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+
+                {visibleCount < sortedProducts.length ? (
+                  <div className="mt-8 flex justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => setVisibleCount((prev) => prev + 8)}
+                    >
+                      Load More
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </div>

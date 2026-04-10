@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,8 +19,14 @@ import { useAdminStore, type AdminProduct } from "@/lib/admin-store";
 import { saveProducts } from "@/lib/firebase/products";
 import { uploadProductImage, uploadProductVideo } from "@/lib/firebase/storage";
 import {
+  normalizeProductImages,
+  normalizeProductVideoUrl,
+} from "@/lib/products";
+import {
   QUICK_SELECT_SIZES,
   getTotalSizeStock,
+  normalizeProductColors,
+  normalizeProductSizeInventory,
   type ProductSizeStock,
 } from "@/lib/product-inventory";
 import {
@@ -77,6 +83,26 @@ const SAVE_PRODUCT_LABELS = {
   error: "Retry",
 };
 
+const DEFAULT_SELECTION_MESSAGE =
+  "Select a product from the list below to open the full Edit Product form.";
+const MISSING_PRODUCT_MESSAGE =
+  "That product could not be found. Select another product to continue editing.";
+
+const buildEditableProductFormData = (
+  product: AdminProduct
+): Partial<AdminProduct> => {
+  const sizeInventory = normalizeProductSizeInventory(product);
+
+  return {
+    ...product,
+    sizes: sizeInventory.map((entry) => entry.size),
+    sizeInventory: sizeInventory.map((entry) => ({ ...entry })),
+    colors: normalizeProductColors(product.colors),
+    images: [...normalizeProductImages(product.images)],
+    videoUrl: normalizeProductVideoUrl(product.videoUrl) ?? "",
+  };
+};
+
 export default function EditProductPage() {
   const products = useAdminStore((state) => state.products);
   const brands = useAdminStore((state) => state.brands);
@@ -96,7 +122,10 @@ export default function EditProductPage() {
   const [videoUploadInputKey, setVideoUploadInputKey] = useState(0);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const hasHandledRouteProductRef = useRef(false);
+  const [pendingRouteProductId, setPendingRouteProductId] = useState<string | null>(null);
+  const [routeSelectionMessage, setRouteSelectionMessage] = useState<string | null>(
+    DEFAULT_SELECTION_MESSAGE
+  );
   const { statuses, setStatus, resetStatus, runAction } = useActionFeedback({
     addImage: "idle",
     uploadImage: "idle",
@@ -109,13 +138,21 @@ export default function EditProductPage() {
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.brand.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const currentSizeInventory = formData.sizeInventory ?? editingProduct?.sizeInventory ?? [];
-  const currentColors = formData.colors ?? editingProduct?.colors ?? [];
-  const currentImages = formData.images ?? editingProduct?.images ?? [];
+  const currentSizeInventory = normalizeProductSizeInventory({
+    sizeInventory: formData.sizeInventory ?? editingProduct?.sizeInventory,
+    sizes: formData.sizes ?? editingProduct?.sizes,
+    stock: formData.stock ?? editingProduct?.stock,
+    inStock: formData.inStock ?? editingProduct?.inStock,
+  });
+  const currentColors = normalizeProductColors(formData.colors ?? editingProduct?.colors);
+  const currentImages = normalizeProductImages(formData.images ?? editingProduct?.images);
   const currentVideoUrl =
-    typeof formData.videoUrl === "string"
-      ? formData.videoUrl
-      : editingProduct?.videoUrl ?? "";
+    normalizeProductVideoUrl(formData.videoUrl ?? editingProduct?.videoUrl) ?? "";
+  const selectedCategory =
+    formData.category === "men" || formData.category === "women"
+      ? formData.category
+      : editingProduct?.category;
+  const availableTypes = selectedCategory ? categories[selectedCategory].filter(Boolean) : [];
 
   const clearImageUploadInput = () => {
     setSelectedImageFile(null);
@@ -157,25 +194,20 @@ export default function EditProductPage() {
 
   const openEditDialog = (product: AdminProduct) => {
     setEditingProduct(product);
-    setFormData({
-      ...product,
-      sizes: [...product.sizes],
-      sizeInventory: product.sizeInventory.map((entry) => ({ ...entry })),
-      colors: [...product.colors],
-      images: [...product.images],
-      videoUrl: product.videoUrl ?? "",
-    });
+    setFormData(buildEditableProductFormData(product));
+    setRouteSelectionMessage(null);
     resetEditorState();
   };
 
   const closeEditDialog = () => {
     setEditingProduct(null);
     setFormData({});
+    setRouteSelectionMessage(DEFAULT_SELECTION_MESSAGE);
     resetEditorState();
   };
 
   useEffect(() => {
-    if (hasHandledRouteProductRef.current || typeof window === "undefined") {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -183,21 +215,45 @@ export default function EditProductPage() {
     const requestedProductId = searchParams.get("productId");
 
     if (!requestedProductId) {
-      hasHandledRouteProductRef.current = true;
+      setPendingRouteProductId(null);
+      setRouteSelectionMessage(DEFAULT_SELECTION_MESSAGE);
       return;
     }
 
-    const requestedProduct = products.find((product) => product.id === requestedProductId);
+    setPendingRouteProductId(requestedProductId);
+    setRouteSelectionMessage("Opening the requested product...");
+  }, []);
+
+  useEffect(() => {
+    if (!pendingRouteProductId) {
+      return;
+    }
+
+    const requestedProduct = products.find((product) => product.id === pendingRouteProductId);
+
     if (!requestedProduct) {
-      hasHandledRouteProductRef.current = true;
+      if (products.length === 0) {
+        return;
+      }
+
+      setPendingRouteProductId(null);
+      setRouteSelectionMessage(MISSING_PRODUCT_MESSAGE);
+
+      if (typeof window !== "undefined") {
+        window.history.replaceState(window.history.state, "", window.location.pathname);
+      }
+
       return;
     }
 
     openEditDialog(requestedProduct);
     setSearchQuery(requestedProduct.name);
-    window.history.replaceState(window.history.state, "", window.location.pathname);
-    hasHandledRouteProductRef.current = true;
-  }, [products]);
+    setPendingRouteProductId(null);
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+    }
+  }, [pendingRouteProductId, products]);
 
   const handleSave = async () => {
     if (!editingProduct) {
@@ -214,7 +270,7 @@ export default function EditProductPage() {
           originalPrice > price
             ? Math.round(((originalPrice - price) / originalPrice) * 100)
             : 0;
-        const sizeInventory = formData.sizeInventory ?? editingProduct.sizeInventory;
+        const sizeInventory = currentSizeInventory;
         const stock =
           formData.sizeInventory !== undefined
             ? getTotalSizeStock(sizeInventory)
@@ -475,28 +531,28 @@ export default function EditProductPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Edit Products</h1>
           <p className="text-muted-foreground">Search and edit existing products</p>
         </div>
       </div>
 
       <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
+        <CardContent className="min-w-0 pt-6">
+          <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by product name or brand..."
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              className="pl-10"
+              className="w-full min-w-0 max-w-full pl-10"
             />
           </div>
         </CardContent>
@@ -504,10 +560,23 @@ export default function EditProductPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>
+            {editingProduct ? `Editing ${editingProduct.name}` : "Select a product"}
+          </CardTitle>
+          <CardDescription>
+            {editingProduct
+              ? "Use the editor to update stock, sizes, colors, pricing, description, and media."
+              : routeSelectionMessage}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Products ({filteredProducts.length})</CardTitle>
           <CardDescription>Click on a product to edit its details</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {filteredProducts.length === 0 ? (
             <div className="py-12 text-center">
               <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
@@ -518,7 +587,7 @@ export default function EditProductPage() {
               {filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
+                  className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-4">
                     <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -535,7 +604,7 @@ export default function EditProductPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => openEditDialog(product)}
-                    className="ml-4 flex-shrink-0"
+                    className="w-full flex-shrink-0 sm:ml-4 sm:w-auto"
                   >
                     <Edit className="mr-2 h-4 w-4" />
                     Edit
@@ -548,20 +617,21 @@ export default function EditProductPage() {
       </Card>
 
       <Dialog open={!!editingProduct} onOpenChange={(open) => !open && closeEditDialog()}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-h-[90vh] w-[95vw] min-w-0 max-w-[95vw] overflow-x-hidden overflow-y-auto px-4 sm:max-w-3xl sm:px-6">
+          <DialogHeader className="min-w-0 pr-8 sm:pr-0">
             <DialogTitle>Edit Product</DialogTitle>
             <DialogDescription>Update the product details below</DialogDescription>
           </DialogHeader>
 
           {editingProduct ? (
-            <div className="space-y-6 py-4">
+            <div className="min-w-0 space-y-6 py-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Product Name</Label>
                   <Input
                     value={formData.name || ""}
                     onChange={(event) => patchFormData({ name: event.target.value })}
+                    className="w-full min-w-0 max-w-full"
                   />
                 </div>
                 <div className="space-y-2">
@@ -570,7 +640,7 @@ export default function EditProductPage() {
                     value={formData.brand}
                     onValueChange={(value) => patchFormData({ brand: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -595,7 +665,7 @@ export default function EditProductPage() {
                       patchFormData({ category: value as "men" | "women" })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -610,18 +680,15 @@ export default function EditProductPage() {
                     value={formData.type}
                     onValueChange={(value) => patchFormData({ type: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full min-w-0 max-w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {formData.category &&
-                        categories[formData.category]
-                          .filter(Boolean)
-                          .map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
+                      {availableTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -636,6 +703,7 @@ export default function EditProductPage() {
                     onChange={(event) =>
                       patchFormData({ price: parseInt(event.target.value, 10) || 0 })
                     }
+                    className="w-full min-w-0 max-w-full"
                   />
                 </div>
                 <div className="space-y-2">
@@ -648,6 +716,7 @@ export default function EditProductPage() {
                         originalPrice: parseInt(event.target.value, 10) || 0,
                       })
                     }
+                    className="w-full min-w-0 max-w-full"
                   />
                 </div>
                 <div className="space-y-2">
@@ -658,6 +727,7 @@ export default function EditProductPage() {
                     onChange={(event) =>
                       patchFormData({ stock: parseInt(event.target.value, 10) || 0 })
                     }
+                    className="w-full min-w-0 max-w-full"
                   />
                   <p className="text-xs text-muted-foreground">
                     Editing total stock keeps the legacy flow working. Per-size stock below
@@ -667,7 +737,7 @@ export default function EditProductPage() {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <Label>Per-Size Stock</Label>
                   <span className="text-xs text-muted-foreground">
                     Quick sizes: {QUICK_SELECT_SIZES.join(", ")}
@@ -679,15 +749,15 @@ export default function EditProductPage() {
                     {currentSizeInventory.map((entry) => (
                       <div
                         key={`size-stock-${entry.size}`}
-                        className="flex items-center gap-3 rounded-lg border border-border p-3"
+                        className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center"
                       >
-                        <div className="min-w-20 text-sm font-medium">UK {entry.size}</div>
+                        <div className="text-sm font-medium sm:min-w-20">UK {entry.size}</div>
                         <Input
                           type="number"
                           min={0}
                           value={entry.stock}
                           onChange={(event) => updateSizeStock(entry.size, event.target.value)}
-                          className="w-28"
+                          className="w-full min-w-0 max-w-full sm:w-28"
                         />
                         <Button
                           type="button"
@@ -707,13 +777,14 @@ export default function EditProductPage() {
                   </p>
                 )}
 
-                <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <Input
                     type="number"
                     min={1}
                     placeholder="Add size"
                     value={newSize}
                     onChange={(event) => setNewSize(event.target.value)}
+                    className="w-full min-w-0 max-w-full"
                   />
                   <Input
                     type="number"
@@ -721,15 +792,16 @@ export default function EditProductPage() {
                     placeholder="Stock"
                     value={newSizeStock}
                     onChange={(event) => setNewSizeStock(event.target.value)}
+                    className="w-full min-w-0 max-w-full"
                   />
-                  <Button type="button" variant="outline" onClick={addSize}>
+                  <Button type="button" variant="outline" onClick={addSize} className="w-full sm:w-auto">
                     Add Size
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <Label>Colors</Label>
                   <span className="text-xs text-muted-foreground">
                     {currentColors.length} option{currentColors.length === 1 ? "" : "s"}
@@ -752,14 +824,14 @@ export default function EditProductPage() {
                             value={color}
                             onChange={(event) => updateColor(index, event.target.value)}
                             placeholder={`Color ${index + 1}`}
-                            className="sm:flex-1"
+                            className="w-full min-w-0 max-w-full sm:flex-1"
                           />
                         </div>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => removeColor(index)}
-                          className="sm:self-stretch"
+                          className="w-full sm:self-stretch sm:w-auto"
                           aria-label={`Remove color ${color || index + 1}`}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -775,11 +847,12 @@ export default function EditProductPage() {
                   </div>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     placeholder="Add custom color"
                     value={newColor}
                     onChange={(event) => setNewColor(event.target.value)}
+                    className="w-full min-w-0 max-w-full"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -787,7 +860,7 @@ export default function EditProductPage() {
                       }
                     }}
                   />
-                  <Button type="button" variant="outline" onClick={addColor}>
+                  <Button type="button" variant="outline" onClick={addColor} className="w-full sm:w-auto">
                     Add Color
                   </Button>
                 </div>
@@ -799,6 +872,7 @@ export default function EditProductPage() {
                   value={formData.description || ""}
                   onChange={(event) => patchFormData({ description: event.target.value })}
                   rows={3}
+                  className="w-full min-w-0 max-w-full"
                 />
               </div>
 
@@ -818,7 +892,7 @@ export default function EditProductPage() {
                 ) : null}
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm font-medium">Images ({currentImages.length})</p>
                     <span className="text-xs text-muted-foreground">
                       Image 1 stays primary unless you choose a different primary image below.
@@ -829,7 +903,7 @@ export default function EditProductPage() {
                     {currentImages.map((image, index) => (
                       <div
                         key={`${image}-${index}`}
-                        className="space-y-3 rounded-lg border border-border p-3"
+                        className="min-w-0 space-y-3 rounded-lg border border-border p-3"
                       >
                         <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
                           <img
@@ -844,15 +918,16 @@ export default function EditProductPage() {
                           ) : null}
                         </div>
 
-                        <div className="space-y-2">
-                          <p className="truncate text-xs text-muted-foreground">{image}</p>
-                          <div className="flex flex-wrap gap-2">
+                        <div className="min-w-0 space-y-2">
+                          <p className="break-all text-xs text-muted-foreground">{image}</p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                             {index > 0 ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleSetPrimaryImage(index)}
+                                className="w-full sm:w-auto"
                               >
                                 Set Primary
                               </Button>
@@ -862,11 +937,11 @@ export default function EditProductPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleRemoveImage(index)}
-                              className="text-destructive hover:text-destructive"
+                              className="w-full text-destructive hover:text-destructive sm:w-auto"
                             >
                               Remove
                             </Button>
-                            <Button variant="ghost" size="sm" asChild>
+                            <Button variant="ghost" size="sm" asChild className="w-full sm:w-auto">
                               <a href={image} target="_blank" rel="noreferrer">
                                 <ExternalLink className="mr-2 h-4 w-4" />
                                 Open
@@ -879,7 +954,7 @@ export default function EditProductPage() {
                   </div>
 
                   <div className="rounded-lg border border-border p-4">
-                    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <Input
                         type="url"
                         placeholder="https://example.com/product-image.jpg"
@@ -889,31 +964,33 @@ export default function EditProductPage() {
                           setMediaError(null);
                           setNewImageUrl(event.target.value);
                         }}
+                        className="w-full min-w-0 max-w-full"
                       />
                       <Button
                         type="button"
                         onClick={handleAddImage}
                         disabled={statuses.addImage === "running" || !newImageUrl.trim()}
-                        className={cn(getActionFeedbackClassName(statuses.addImage))}
+                        className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.addImage))}
                       >
                         <ImagePlus className="h-4 w-4" />
                         {getActionFeedbackLabel(statuses.addImage, ADD_IMAGE_LABELS)}
                       </Button>
                     </div>
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <Input
                         key={imageUploadInputKey}
                         type="file"
                         accept="image/*"
                         onChange={handleImageFileChange}
                         disabled={statuses.uploadImage === "running"}
+                        className="w-full min-w-0 max-w-full"
                       />
                       <Button
                         type="button"
                         onClick={handleUploadImage}
                         disabled={statuses.uploadImage === "running" || !selectedImageFile}
-                        className={cn(getActionFeedbackClassName(statuses.uploadImage))}
+                        className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.uploadImage))}
                       >
                         <Upload className="h-4 w-4" />
                         {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
@@ -936,7 +1013,7 @@ export default function EditProductPage() {
                       </p>
                     </div>
                     {currentVideoUrl ? (
-                      <Button variant="ghost" size="sm" asChild>
+                      <Button variant="ghost" size="sm" asChild className="w-full sm:w-auto">
                         <a href={currentVideoUrl} target="_blank" rel="noreferrer">
                           <ExternalLink className="mr-2 h-4 w-4" />
                           Open Video
@@ -955,22 +1032,23 @@ export default function EditProductPage() {
                       setMediaError(null);
                       patchFormData({ videoUrl: event.target.value });
                     }}
-                    className="mt-3"
+                    className="mt-3 w-full min-w-0 max-w-full"
                   />
 
-                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <Input
                       key={videoUploadInputKey}
                       type="file"
                       accept="video/*"
                       onChange={handleVideoFileChange}
                       disabled={statuses.uploadVideo === "running"}
+                      className="w-full min-w-0 max-w-full"
                     />
                     <Button
                       type="button"
                       onClick={handleUploadVideo}
                       disabled={statuses.uploadVideo === "running" || !selectedVideoFile}
-                      className={cn(getActionFeedbackClassName(statuses.uploadVideo))}
+                      className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.uploadVideo))}
                     >
                       <Film className="h-4 w-4" />
                       {getActionFeedbackLabel(statuses.uploadVideo, UPLOAD_VIDEO_LABELS)}
@@ -979,7 +1057,7 @@ export default function EditProductPage() {
 
                   {currentVideoUrl ? (
                     <div className="mt-3">
-                      <Button type="button" variant="outline" onClick={handleClearVideo}>
+                      <Button type="button" variant="outline" onClick={handleClearVideo} className="w-full sm:w-auto">
                         Remove Video
                       </Button>
                     </div>
@@ -990,22 +1068,26 @@ export default function EditProductPage() {
 
               {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={closeEditDialog}>
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={closeEditDialog} className="w-full sm:w-auto">
                   <X className="mr-2 h-4 w-4" />
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSave}
                   disabled={statuses.saveProduct === "running"}
-                  className={cn(getActionFeedbackClassName(statuses.saveProduct))}
+                  className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.saveProduct))}
                 >
                   <Save className="h-4 w-4" />
                   {getActionFeedbackLabel(statuses.saveProduct, SAVE_PRODUCT_LABELS)}
                 </Button>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+              {routeSelectionMessage}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

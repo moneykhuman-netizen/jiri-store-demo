@@ -116,14 +116,14 @@ export default function InventoryPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </Link>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Price & Stock Overview</h1>
           <p className="text-muted-foreground">
             Review rupee pricing here. Manage detailed stock safely from Edit Product.
@@ -176,19 +176,19 @@ export default function InventoryPage() {
       </div>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="min-w-0 pt-6">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by product name or brand..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="pl-10"
+                className="w-full min-w-0 max-w-full pl-10"
               />
             </div>
             {showLowStockOnly ? (
-              <Link href="/admin/inventory">
+              <Link href="/admin/inventory" className="w-full sm:w-auto">
                 <Button type="button" variant="outline" className="w-full sm:w-auto">
                   Show All Products
                 </Button>
@@ -207,7 +207,7 @@ export default function InventoryPage() {
               : "Review stock status, update price safely, and open Edit Product for detailed inventory changes."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {filteredProducts.length === 0 ? (
             <div className="py-8 text-sm text-muted-foreground">
               {showLowStockOnly
@@ -215,7 +215,94 @@ export default function InventoryPage() {
                 : "No products match the current search."}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="space-y-3 md:hidden">
+                {filteredProducts.map((product) => {
+                  const changed = hasChanges(product.id);
+                  const activeSizeCount = product.sizeInventory.filter(
+                    (entry) => entry.stock > 0
+                  ).length;
+                  const stockStatus =
+                    product.stock === 0
+                      ? "Out of stock"
+                      : product.stock < LOW_STOCK_THRESHOLD
+                        ? "Low stock"
+                        : "In stock";
+                  const rowStatus = statuses[product.id] ?? "idle";
+
+                  return (
+                    <div
+                      key={product.id}
+                      className="min-w-0 space-y-4 rounded-lg border border-border p-4"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="break-words text-sm font-medium">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">{product.brand}</p>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Price (Rs)
+                          </p>
+                          <Input
+                            type="number"
+                            value={getValue(product.id, product.price)}
+                            onChange={(event) => handleValueChange(product.id, event.target.value)}
+                            className="w-full min-w-0 max-w-full text-right"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Status
+                          </p>
+                          <span
+                            className={cn(
+                              "inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium",
+                              product.stock === 0
+                                ? "bg-red-100 text-red-700"
+                                : product.stock < LOW_STOCK_THRESHOLD
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-green-100 text-green-700"
+                            )}
+                          >
+                            {stockStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">{product.stock.toLocaleString()} total units</p>
+                        <p className="text-muted-foreground">
+                          {activeSizeCount} size{activeSizeCount === 1 ? "" : "s"} currently stocked
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <Button variant="outline" size="sm" asChild className="w-full">
+                          <Link href={`/admin/products/edit?productId=${product.id}`}>
+                            <Settings2 className="mr-1 h-3 w-3" />
+                            Manage Stock
+                          </Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={rowStatus === "success" ? "outline" : "default"}
+                          onClick={() => void handleSave(product.id)}
+                          disabled={!changed || rowStatus === "running"}
+                          className={cn("w-full", getActionFeedbackClassName(rowStatus))}
+                        >
+                          <Save className="mr-1 h-3 w-3" />
+                          {getActionFeedbackLabel(rowStatus, PRICE_SAVE_LABELS)}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
@@ -323,7 +410,8 @@ export default function InventoryPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
