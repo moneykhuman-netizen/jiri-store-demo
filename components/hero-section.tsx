@@ -106,7 +106,7 @@ export function HeroSection() {
           <Link href={HERO_BUTTON_LINKS[slide.section]}>
             <Button
               size="lg"
-              className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8"
+              className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               {slide.buttonText}
             </Button>
@@ -119,14 +119,14 @@ export function HeroSection() {
         <>
           <button
             onClick={prev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white p-2 rounded-full"
+            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white p-2 rounded-full shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             aria-label="Previous slide"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={next}
-            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white p-2 rounded-full"
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white p-2 rounded-full shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             aria-label="Next slide"
           >
             <ChevronRight className="w-5 h-5" />
@@ -138,7 +138,7 @@ export function HeroSection() {
               <button
                 key={idx}
                 onClick={() => goTo(idx)}
-                className={`w-3 h-3 rounded-full ${idx === activeIndex ? "bg-accent" : "bg-white/60"}`}
+                className={`w-3 h-3 rounded-full transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${idx === activeIndex ? "bg-accent" : "bg-white/60"}`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
             ))}

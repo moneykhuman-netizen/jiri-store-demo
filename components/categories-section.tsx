@@ -54,7 +54,7 @@ export function CategoriesSection() {
               <Link
                 key={category.section}
                 href={CATEGORY_CARD_LINKS[category.section]}
-                className="group relative overflow-hidden rounded-xl aspect-[16/10] md:aspect-[16/9]"
+                className="group relative overflow-hidden rounded-xl aspect-[16/10] md:aspect-[16/9] shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 {/* Background Image */}
                 {hasImage ? (
@@ -62,6 +62,7 @@ export function CategoriesSection() {
                     src={imageSrc}
                     alt={category.title}
                     fill
+                    loading="lazy"
                     className="object-cover group-hover:scale-105 transition-transform duration-700"
                   />
                 ) : null}
@@ -80,7 +81,7 @@ export function CategoriesSection() {
                   <p className="text-card/80 text-sm md:text-base mb-4">
                     {category.description}
                   </p>
-                  <div className="flex items-center gap-2 text-card font-medium group-hover:gap-3 transition-all">
+                  <div className="flex items-center gap-2 text-card font-medium group-hover:gap-3 transition-all duration-200">
                     <span>Explore Collection</span>
                     <ArrowRight className="w-4 h-4" />
                   </div>

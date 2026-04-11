@@ -203,7 +203,7 @@ export default function ProductPage({
         `${selectedColor ? `\nColor: ${selectedColor}` : ""}` +
         `\nPrice: Rs ${product.price.toLocaleString()}`
     );
-    return `https://wa.me/919863146558?text=${message}`;
+    return `https://wa.me/918485957694?text=${message}`;
   };
 
   const handleReviewDialogChange = (open: boolean) => {

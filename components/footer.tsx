@@ -34,7 +34,7 @@ const formatWhatsAppHref = (value: string) => {
 
 export function Footer() {
   const social = useAdminStore((s) => s.socialLinks);
-  const storePhoneNumber = "919863146558";
+  const storePhoneNumber = "918485957694";
   const normalizedSocial = normalizeSocialLinks(social);
   const facebook = normalizeSocialValue(normalizedSocial.facebook);
   const instagram = normalizeSocialValue(normalizedSocial.instagram);
@@ -222,10 +222,10 @@ export function Footer() {
               <li className="flex items-center gap-3.5">
                 <Phone className="h-5 w-5 shrink-0 text-primary-foreground/72" />
                 <a 
-                  href="tel:+919863146558" 
+                  href="tel:+918485957694" 
                   className="text-sm leading-6 text-primary-foreground/78 transition-opacity hover:opacity-100"
                 >
-                  +91 9863146558
+                  +91 8485957694
                 </a>
               </li>
               <li className="flex items-center gap-3.5">

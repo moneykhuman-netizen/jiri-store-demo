@@ -83,6 +83,7 @@ export function Header() {
       width={180}
       height={24
 }
+      loading="lazy"
       className="mt-1 h-5 w-auto object-contain"
     />
   </div>
@@ -92,7 +93,7 @@ export function Header() {
           <nav className="hidden lg:flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-1 font-medium">
+                <Button variant="ghost" className="flex items-center gap-1 font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
                   Men <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -114,7 +115,7 @@ export function Header() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-1 font-medium">
+                <Button variant="ghost" className="flex items-center gap-1 font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
                   Women <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -135,7 +136,7 @@ export function Header() {
             </DropdownMenu>
 
             <Link href="/products">
-              <Button variant="ghost" className="font-medium">
+              <Button variant="ghost" className="font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
                 All Products
               </Button>
             </Link>
@@ -158,7 +159,7 @@ export function Header() {
           {/* Right Actions */}
           <div className="flex items-center gap-2">
             <Link href="/products" className="hidden sm:block">
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
                 <ShoppingBag className="h-4 w-4" />
                 <span className="hidden sm:inline">Shop Now</span>
               </Button>
@@ -168,7 +169,7 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="lg:hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
               {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -200,7 +201,7 @@ export function Header() {
               <div className="grid grid-cols-2 gap-2">
                 <Link
                   href="/products?category=men"
-                  className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
+                  className="text-sm py-2 px-3 bg-secondary rounded-md transition-all duration-200 hover:scale-[1.02] hover:bg-muted active:scale-[0.98]"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   All Men&apos;s
@@ -209,7 +210,7 @@ export function Header() {
                   <Link
                     key={type}
                     href={`/products?category=men&type=${encodeURIComponent(type)}`}
-                    className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
+                    className="text-sm py-2 px-3 bg-secondary rounded-md transition-all duration-200 hover:scale-[1.02] hover:bg-muted active:scale-[0.98]"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {type}
@@ -222,7 +223,7 @@ export function Header() {
               <div className="grid grid-cols-2 gap-2">
                 <Link
                   href="/products?category=women"
-                  className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
+                  className="text-sm py-2 px-3 bg-secondary rounded-md transition-all duration-200 hover:scale-[1.02] hover:bg-muted active:scale-[0.98]"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   All Women&apos;s
@@ -231,7 +232,7 @@ export function Header() {
                   <Link
                     key={type}
                     href={`/products?category=women&type=${encodeURIComponent(type)}`}
-                    className="text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors"
+                    className="text-sm py-2 px-3 bg-secondary rounded-md transition-all duration-200 hover:scale-[1.02] hover:bg-muted active:scale-[0.98]"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {type}
@@ -241,7 +242,7 @@ export function Header() {
             </div>
             <Link
               href="/products"
-              className="block text-sm py-2 px-3 bg-secondary rounded-md hover:bg-muted transition-colors font-medium"
+              className="block text-sm py-2 px-3 bg-secondary rounded-md font-medium transition-all duration-200 hover:scale-[1.02] hover:bg-muted active:scale-[0.98]"
               onClick={() => setIsMenuOpen(false)}
             >
               All Products

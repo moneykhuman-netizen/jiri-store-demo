@@ -17,16 +17,17 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <Link href={`/product/${product.id}`} className="group block h-full min-w-0">
       <div
-        className={`bg-card rounded-lg overflow-hidden border border-border ${
-          product.inStock ? "hover:border-ring hover:shadow-lg" : "opacity-70"
-        } flex h-full min-w-0 flex-col transition-all duration-300`}
+        className={`bg-stone-50 rounded-lg overflow-hidden border border-stone-200 ${
+          product.inStock ? "hover:border-neutral-200 hover:scale-[1.02] active:scale-[0.98]" : "opacity-70"
+        } flex h-full min-w-0 flex-col shadow-sm transition-all duration-200`}
       >
         {/* Image Container */}
-        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-secondary">
+        <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-neutral-50">
           <Image
             src={primaryImage}
             alt={product.name}
             fill
+            loading="lazy"
             className={`object-cover group-hover:scale-105 transition-transform duration-500 ${
               !product.inStock ? "opacity-50" : ""
             }`}

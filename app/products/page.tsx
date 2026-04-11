@@ -193,7 +193,7 @@ function ProductsContent() {
                   Try adjusting your filters or search terms.
                 </p>
                 <Link href="/products">
-                  <Button variant="outline">Clear Filters</Button>
+                  <Button variant="outline" className="shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">Clear Filters</Button>
                 </Link>
               </div>
             ) : (
@@ -208,6 +208,7 @@ function ProductsContent() {
                   <div className="mt-8 flex justify-center">
                     <Button
                       variant="outline"
+                      className="shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                       onClick={() => setVisibleCount((prev) => prev + 8)}
                     >
                       Load More
@@ -230,7 +231,7 @@ export default function ProductsPage() {
     <Suspense
       fallback={
         <main className="min-h-screen bg-background">
-          <div className="container mx-auto px-4 py-16 flex justify-center">
+          <div className="container mx-auto px-4 py-16 flex justify-center animate-pulse">
             <Spinner />
           </div>
         </main>

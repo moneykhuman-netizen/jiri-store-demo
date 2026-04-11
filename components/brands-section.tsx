@@ -72,6 +72,21 @@ const themeStyles: Record<Exclude<BrandTheme, "auto">, { bg: string; accent: str
   },
 };
 
+const brandColors: Record<string, string> = {
+  Nike: "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
+  Adidas: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
+  Puma: "bg-gradient-to-br from-rose-900 to-rose-700 text-white",
+  Reebok: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
+  Skechers: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
+  "New Balance": "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
+  Clarks: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
+  Woodland: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
+  Bata: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
+  "Air Jordan": "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
+  Asic: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
+  Hoka: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
+};
+
 export function BrandsSection() {
   const brands = useAdminStore((s) => s.brands).slice(0, 6);
   const brandPresentations = useAdminStore((s) => s.brandPresentations);
@@ -144,23 +159,22 @@ export function BrandsSection() {
               ? { ...baseStyle, bg: theme.bg, accent: theme.accent }
               : baseStyle;
             const tagline = presentation?.tagline?.trim() ?? "";
-            const taglineClass =
-              style.accent === "text-black" ? "text-black/60" : "text-white/60";
+            const colorClassName = brandColors[brand] ?? "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900";
 
             return (
               <Link
                 key={brand}
                 href={`/products?brand=${encodeURIComponent(brand)}`}
-                className={`${style.bg} rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center aspect-square relative overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}
+                className={`${colorClassName} rounded-xl text-center flex flex-col items-center justify-center h-[110px] p-5 relative overflow-hidden group shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]`}
               >
                 {/* Brand Logo Text */}
-                <span className={`text-2xl md:text-3xl font-black tracking-tight ${style.accent} text-center z-10`}>
+                <span className="text-sm font-semibold text-center leading-tight line-clamp-2 z-10">
                   {style.logo}
                 </span>
                 
                 {/* Subtle tagline */}
                 {tagline ? (
-                  <span className={`${taglineClass} text-xs mt-2 font-medium uppercase tracking-wider z-10`}>
+                  <span className="text-xs mt-1 text-center line-clamp-2 tracking-wide opacity-70 z-10">
                     {tagline}
                   </span>
                 ) : null}
@@ -176,7 +190,7 @@ export function BrandsSection() {
         <div className="mt-8 text-center lg:hidden">
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-primary/90 active:scale-[0.98]"
           >
             Explore All Brands
             <ChevronRight className="w-4 h-4" />
