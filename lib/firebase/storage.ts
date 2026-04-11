@@ -3,9 +3,11 @@
 import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import { app } from "@/lib/firebase/client";
 import type { HeroSection } from "@/lib/site-data";
+import { compressImage } from "@/lib/utils/compressImage";
 
 const STORAGE_PRODUCT_IMAGES_ROOT = "products";
 const STORAGE_SITE_MEDIA_ROOT = "site-content";
+const MAX_PRODUCT_IMAGE_SIZE = 10 * 1024 * 1024;
 
 const createUploadId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -46,7 +48,7 @@ const uploadStorageAsset = async ({
   fileTypePrefix: "image/" | "video/";
   invalidTypeMessage: string;
 }) => {
-  if (!(file instanceof File) || file.size <= 0) {
+  if (!file || !file.type || file.size <= 0) {
     throw new Error(`A valid ${fileTypePrefix === "image/" ? "image" : "video"} file is required.`);
   }
 
@@ -70,6 +72,13 @@ export const uploadProductImage = async (file: File, productId: string) => {
     throw new Error("Product ID is required for image upload.");
   }
 
+  if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
+    window.alert("Image too large. Max 10MB allowed.");
+    throw new Error("Image too large. Max 10MB allowed.");
+  }
+
+  const compressedFile = await compressImage(file);
+
   const uploadId = createUploadId();
   const normalizedFileName = normalizeStorageFileName(file.name);
   const storagePath =
@@ -77,7 +86,7 @@ export const uploadProductImage = async (file: File, productId: string) => {
     `${uploadId}-${normalizedFileName}`;
 
   return uploadStorageAsset({
-    file,
+    file: compressedFile,
     storagePath,
     fileTypePrefix: "image/",
     invalidTypeMessage: "Only image files can be uploaded.",

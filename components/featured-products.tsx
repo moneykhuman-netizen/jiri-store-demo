@@ -26,7 +26,8 @@ export function FeaturedProducts() {
   }, [setFeaturedCollectionFromRemote]);
 
   const productMap = new Map(products.map((product) => [product.id, product] as const));
-  const featuredProducts = featuredCollection.productIds
+  const featuredProducts = [...featuredCollection.productIds]
+    .reverse()
     .map((productId) => productMap.get(productId))
     .filter((product): product is AdminProduct => Boolean(product));
 

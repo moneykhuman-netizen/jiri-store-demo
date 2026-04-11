@@ -4,6 +4,7 @@ import { type ChangeEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminStore, type AdminProduct } from "@/lib/admin-store";
 import { uploadProductImage, uploadProductVideo } from "@/lib/firebase/storage";
+import { DEFAULT_PRODUCT_IMAGE } from "@/lib/products";
 import {
   getActionFeedbackClassName,
   getActionFeedbackLabel,
@@ -17,9 +18,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, ExternalLink, Film, Plus, Save, Upload, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, Film, ImagePlus, Plus, Save, Upload, X } from "lucide-react";
 import Link from "next/link";
-import { QUICK_SELECT_SIZES } from "@/lib/product-inventory";
+import { QUICK_SELECT_SIZES, distributeStockAcrossSizes } from "@/lib/product-inventory";
 
 const ADD_PRODUCT_LABELS = {
   idle: "Add Product",
@@ -28,8 +29,15 @@ const ADD_PRODUCT_LABELS = {
   error: "Retry",
 };
 
+const ADD_IMAGE_LABELS = {
+  idle: "Add Image",
+  running: "Adding...",
+  success: "Added âœ“",
+  error: "Retry",
+};
+
 const UPLOAD_IMAGE_LABELS = {
-  idle: "Upload Image",
+  idle: "Upload Images",
   running: "Uploading...",
   success: "Uploaded ✓",
   error: "Retry",
@@ -72,17 +80,19 @@ export default function AddProductPage() {
     originalPrice: "",
     description: "",
     stock: "",
-    imageUrl: "",
     videoUrl: "",
   });
 
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
+  const [customSize, setCustomSize] = useState("");
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [customColor, setCustomColor] = useState("");
   const [features, setFeatures] = useState<string[]>([""]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isNew, setIsNew] = useState(true);
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [imageUploadInputKey, setImageUploadInputKey] = useState(0);
   const [videoUploadInputKey, setVideoUploadInputKey] = useState(0);
@@ -90,6 +100,7 @@ export default function AddProductPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { statuses, resetStatus, runAction } = useActionFeedback({
     addProduct: "idle",
+    addImage: "idle",
     uploadImage: "idle",
     uploadVideo: "idle",
   });
@@ -104,7 +115,7 @@ export default function AddProductPage() {
   };
 
   const clearImageUploadInput = () => {
-    setSelectedImageFile(null);
+    setSelectedImageFiles([]);
     setImageUploadInputKey((currentKey) => currentKey + 1);
   };
 
@@ -129,7 +140,7 @@ export default function AddProductPage() {
 
         const stockVal = parseInt(formData.stock, 10) || 0;
         const normalizedSelectedSizes = [...new Set(selectedSizes)].sort((a, b) => a - b);
-        const trimmedImageUrl = formData.imageUrl.trim();
+        const sizeInventory = distributeStockAcrossSizes(normalizedSelectedSizes, stockVal);
         const trimmedVideoUrl = formData.videoUrl.trim();
         const newProduct: AdminProduct = {
           id: draftProductIdRef.current,
@@ -143,11 +154,9 @@ export default function AddProductPage() {
           rating: 4.0,
           reviews: 0,
           sizes: normalizedSelectedSizes,
-          sizeInventory: normalizedSelectedSizes.map((size) => ({ size, stock: 1 })),
+          sizeInventory,
           colors: selectedColors.map((color) => color.trim()).filter(Boolean),
-          images: trimmedImageUrl
-            ? [trimmedImageUrl]
-            : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80"],
+          images: productImages.length > 0 ? productImages : [DEFAULT_PRODUCT_IMAGE],
           ...(trimmedVideoUrl ? { videoUrl: trimmedVideoUrl } : {}),
           description: formData.description,
           features: features.filter((feature) => feature.trim() !== ""),
@@ -168,22 +177,23 @@ export default function AddProductPage() {
   };
 
   const handleImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("addImage");
     resetStatus("uploadImage");
     setMediaError(null);
 
-    const nextFile = event.target.files?.[0] ?? null;
-    if (!nextFile) {
-      setSelectedImageFile(null);
+    const nextFiles = Array.from(event.target.files ?? []);
+    if (nextFiles.length === 0) {
+      setSelectedImageFiles([]);
       return;
     }
 
-    if (!nextFile.type.startsWith("image/")) {
+    if (nextFiles.some((file) => !file.type.startsWith("image/"))) {
       clearImageUploadInput();
-      setMediaError("Please choose an image file.");
+      setMediaError("Please choose image files only.");
       return;
     }
 
-    setSelectedImageFile(nextFile);
+    setSelectedImageFiles(nextFiles);
   };
 
   const handleVideoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -205,18 +215,55 @@ export default function AddProductPage() {
     setSelectedVideoFile(nextFile);
   };
 
+  const handleAddImage = async () => {
+    try {
+      await runAction("addImage", () => {
+        const trimmedImageUrl = newImageUrl.trim();
+
+        if (!trimmedImageUrl) {
+          throw new Error("Enter an image URL before adding it.");
+        }
+
+        if (productImages.includes(trimmedImageUrl)) {
+          throw new Error("That image URL is already attached to this product.");
+        }
+
+        setProductImages((current) => [...current, trimmedImageUrl]);
+        setNewImageUrl("");
+        setMediaError(null);
+      });
+    } catch (error) {
+      setMediaError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't add that image right now. Please try again."
+      );
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setProductImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
+    setMediaError(null);
+  };
+
   const handleUploadImage = async () => {
-    if (!selectedImageFile) {
+    if (selectedImageFiles.length === 0) {
       return;
     }
 
     try {
       await runAction("uploadImage", async () => {
-        const uploadedImageUrl = await uploadProductImage(
-          selectedImageFile,
-          draftProductIdRef.current
-        );
-        updateFormData({ imageUrl: uploadedImageUrl });
+        const uploadedImageUrls: string[] = [];
+
+        for (const imageFile of selectedImageFiles) {
+          const uploadedImageUrl = await uploadProductImage(
+            imageFile,
+            draftProductIdRef.current
+          );
+          uploadedImageUrls.push(uploadedImageUrl);
+        }
+
+        setProductImages((current) => [...current, ...uploadedImageUrls]);
         clearImageUploadInput();
         setMediaError(null);
       });
@@ -267,6 +314,16 @@ export default function AddProductPage() {
     );
   };
 
+  const addCustomSize = () => {
+    const parsedSize = parseInt(customSize, 10);
+    if (!Number.isFinite(parsedSize) || parsedSize < 1) {
+      return;
+    }
+
+    setSelectedSizes((prev) => (prev.includes(parsedSize) ? prev : [...prev, parsedSize]));
+    setCustomSize("");
+  };
+
   const toggleColor = (color: string) => {
     setSelectedColors((prev) =>
       prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
@@ -299,7 +356,9 @@ export default function AddProductPage() {
     setSelectedColors((prev) => prev.filter((_, colorIndex) => colorIndex !== index));
   };
 
-  const availableSizes = QUICK_SELECT_SIZES;
+  const availableSizes = Array.from(new Set([...QUICK_SELECT_SIZES, ...selectedSizes])).sort(
+    (a, b) => a - b
+  );
   const availableTypes = formData.category ? categories[formData.category] : [];
 
   return (
@@ -367,6 +426,7 @@ export default function AddProductPage() {
                   onValueChange={(value) => {
                     updateFormData({ category: value as "men" | "women", type: "" });
                     setSelectedSizes([]);
+                    setCustomSize("");
                   }}
                   required
                 >
@@ -468,9 +528,19 @@ export default function AddProductPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
-              <Label>Available Sizes (UK)</Label>
+              <Label>Available Sizes</Label>
               {formData.category ? (
                 <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Common sizes: {QUICK_SELECT_SIZES.join(", ")}
+                    </p>
+                    {selectedSizes.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {[...selectedSizes].sort((a, b) => a - b).join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {availableSizes.map((size) => (
                       <button
@@ -487,8 +557,27 @@ export default function AddProductPage() {
                       </button>
                     ))}
                   </div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Add custom size"
+                      value={customSize}
+                      onChange={(event) => setCustomSize(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addCustomSize();
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={addCustomSize}>
+                      Add Size
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Selected sizes start with stock 1 each. You can edit per-size stock later from Edit Product.
+                    Sizes are saved exactly as entered. Total stock is distributed across the
+                    selected sizes, and you can fine-tune per-size stock later from Edit Product.
                   </p>
                 </div>
               ) : (
@@ -597,8 +686,8 @@ export default function AddProductPage() {
           <CardHeader>
             <CardTitle>Product Media</CardTitle>
             <CardDescription>
-              Set the primary product image now. Additional images and media management stay in
-              Edit Product.
+              Add product images now. The first image stays primary by default unless you change it
+              later from Edit Product.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -609,72 +698,111 @@ export default function AddProductPage() {
             ) : null}
 
             <div className="space-y-4 rounded-lg border border-border p-4">
-              <div className="space-y-1">
-                <Label htmlFor="imageUrl">Primary Image</Label>
-                <p className="text-xs text-muted-foreground">
-                  URL input stays supported. Uploading stores a URL string for the same primary
-                  image field.
-                </p>
-              </div>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium">Images ({productImages.length})</p>
+                  <span className="text-xs text-muted-foreground">
+                    The first saved image stays primary until you change it later.
+                  </span>
+                </div>
 
-              <Input
-                id="imageUrl"
-                type="url"
-                placeholder="https://example.com/image.jpg"
-                value={formData.imageUrl}
-                onChange={(e) => {
-                  resetStatus("uploadImage");
-                  setMediaError(null);
-                  updateFormData({ imageUrl: e.target.value });
-                }}
-              />
+                {productImages.length > 0 ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {productImages.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="min-w-0 space-y-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
+                          <img
+                            src={image}
+                            alt={`Product image ${index + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          {index === 0 ? (
+                            <div className="absolute left-2 top-2 rounded bg-primary px-2 py-1 text-xs text-primary-foreground">
+                              Primary
+                            </div>
+                          ) : null}
+                        </div>
 
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                <Input
-                  key={imageUploadInputKey}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  disabled={statuses.uploadImage === "running"}
-                />
-                <Button
-                  type="button"
-                  onClick={handleUploadImage}
-                  disabled={statuses.uploadImage === "running" || !selectedImageFile}
-                  className={cn(getActionFeedbackClassName(statuses.uploadImage))}
-                >
-                  <Upload className="h-4 w-4" />
-                  {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
-                </Button>
-              </div>
-
-              {formData.imageUrl.trim() ? (
-                <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-                  <div className="overflow-hidden rounded-lg border border-border bg-muted">
-                    <img
-                      src={formData.imageUrl.trim()}
-                      alt="Primary product preview"
-                      className="aspect-square h-full w-full object-cover"
-                    />
+                        <div className="min-w-0 space-y-2">
+                          <p className="break-all text-xs text-muted-foreground">{image}</p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveImage(index)}
+                              className="w-full text-destructive hover:text-destructive sm:w-auto"
+                            >
+                              Remove
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild className="w-full sm:w-auto">
+                              <a href={image} target="_blank" rel="noreferrer">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Open
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Primary image ready</p>
-                    <p className="break-all text-xs text-muted-foreground">
-                      {formData.imageUrl.trim()}
-                    </p>
-                    <Button variant="ghost" size="sm" asChild>
-                      <a href={formData.imageUrl.trim()} target="_blank" rel="noreferrer">
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Open Image
-                      </a>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to keep the default product image for now.
+                  </p>
+                )}
+
+                <div className="rounded-lg border border-border p-4">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      type="url"
+                      placeholder="https://example.com/product-image.jpg"
+                      value={newImageUrl}
+                      onChange={(event) => {
+                        resetStatus("addImage");
+                        setMediaError(null);
+                        setNewImageUrl(event.target.value);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddImage}
+                      disabled={statuses.addImage === "running" || !newImageUrl.trim()}
+                      className={cn(getActionFeedbackClassName(statuses.addImage))}
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                      {getActionFeedbackLabel(statuses.addImage, ADD_IMAGE_LABELS)}
                     </Button>
                   </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      key={imageUploadInputKey}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageFileChange}
+                      disabled={statuses.uploadImage === "running"}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleUploadImage}
+                      disabled={statuses.uploadImage === "running" || selectedImageFiles.length === 0}
+                      className={cn(getActionFeedbackClassName(statuses.uploadImage))}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
+                    </Button>
+                  </div>
+
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    URL fallback stays supported, and file uploads append images in upload order.
+                  </p>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to keep the default product image for now.
-                </p>
-              )}
+              </div>
             </div>
 
             <div className="space-y-4 rounded-lg border border-border p-4">

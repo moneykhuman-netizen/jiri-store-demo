@@ -28,7 +28,8 @@ export function NewArrivals() {
   }, [setNewArrivalsCollectionFromRemote]);
 
   const productMap = new Map(products.map((product) => [product.id, product] as const));
-  const newProducts = newArrivalsCollection.productIds
+  const newProducts = [...newArrivalsCollection.productIds]
+    .reverse()
     .map((productId) => productMap.get(productId))
     .filter((product): product is AdminProduct => Boolean(product));
 

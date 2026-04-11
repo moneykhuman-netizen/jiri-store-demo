@@ -199,7 +199,7 @@ export default function ProductPage({
   const generateWhatsAppLink = () => {
     const message = encodeURIComponent(
       `Hello, I want to order ${product.name} from JIRI Pick Up Store.` +
-        `${selectedSize ? `\nSize: UK ${selectedSize}` : ""}` +
+        `${selectedSize ? `\nSize: ${selectedSize}` : ""}` +
         `${selectedColor ? `\nColor: ${selectedColor}` : ""}` +
         `\nPrice: Rs ${product.price.toLocaleString()}`
     );
@@ -510,7 +510,7 @@ export default function ProductPage({
                 <h3 className="font-semibold text-foreground">
                   Size:{" "}
                   <span className="font-normal text-muted-foreground">
-                    {selectedSize ? `UK ${selectedSize}` : "Select a size"}
+                    {selectedSize ? `${selectedSize}` : "Select a size"}
                   </span>
                 </h3>
                 <button className="text-sm text-accent hover:underline">

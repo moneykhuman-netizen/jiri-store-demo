@@ -13,6 +13,24 @@ import { getProductSizeNumbers } from "@/lib/product-inventory";
 import { adaptProductForStorefront } from "@/lib/products/adaptProductForStorefront";
 import Link from "next/link";
 
+const getSortableCreatedAt = (value: unknown) => {
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  return null;
+};
+
 function ProductsContent() {
   const searchParams = useSearchParams();
   const rawProducts = useAdminStore((state) => state.products);
@@ -100,17 +118,28 @@ function ProductsContent() {
 
   const sortedProducts = useMemo(() => {
     return [...filteredProducts].sort((a, b) => {
-      const aIsNewArrival = newArrivalProductIds.has(a.id);
-      const bIsNewArrival = newArrivalProductIds.has(b.id);
+      const aIsNewArrival =
+        a.newArrival === true || a.isNew === true || newArrivalProductIds.has(a.id);
+      const bIsNewArrival =
+        b.newArrival === true || b.isNew === true || newArrivalProductIds.has(b.id);
 
       if (aIsNewArrival && !bIsNewArrival) return -1;
       if (!aIsNewArrival && bIsNewArrival) return 1;
 
-      const aIsFeatured = featuredProductIds.has(a.id);
-      const bIsFeatured = featuredProductIds.has(b.id);
+      const aIsFeatured =
+        a.featured === true || a.isFeatured === true || featuredProductIds.has(a.id);
+      const bIsFeatured =
+        b.featured === true || b.isFeatured === true || featuredProductIds.has(b.id);
 
       if (aIsFeatured && !bIsFeatured) return -1;
       if (!aIsFeatured && bIsFeatured) return 1;
+
+      const aCreatedAt = getSortableCreatedAt(a.createdAt);
+      const bCreatedAt = getSortableCreatedAt(b.createdAt);
+
+      if (aCreatedAt !== null && bCreatedAt !== null && aCreatedAt !== bCreatedAt) {
+        return bCreatedAt - aCreatedAt;
+      }
 
       return 0;
     });

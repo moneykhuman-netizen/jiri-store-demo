@@ -751,7 +751,7 @@ export default function EditProductPage() {
                         key={`size-stock-${entry.size}`}
                         className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center"
                       >
-                        <div className="text-sm font-medium sm:min-w-20">UK {entry.size}</div>
+                        <div className="text-sm font-medium sm:min-w-20">{entry.size}</div>
                         <Input
                           type="number"
                           min={0}

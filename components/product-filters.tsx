@@ -234,7 +234,7 @@ export function ProductFilters({ currentCategory }: ProductFiltersProps) {
                     htmlFor={`${idPrefix}size-${size}`}
                     className={labelClass}
                   >
-                    UK {size}
+                    {size}
                   </Label>
                 </div>
               ))}

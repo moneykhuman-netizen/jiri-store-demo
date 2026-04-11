@@ -3,7 +3,7 @@ export interface ProductSizeStock {
   stock: number;
 }
 
-export const QUICK_SELECT_SIZES = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export const QUICK_SELECT_SIZES = [40, 41, 42, 43, 44, 45] as const;
 
 type InventoryProductLike = {
   sizes?: unknown;
