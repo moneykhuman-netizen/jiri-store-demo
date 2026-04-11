@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAdminAuth } from "@/components/admin/admin-auth-provider";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ const getAuthErrorMessage = (error: unknown) => {
   }
 };
 
-export default function AdminLoginPage() {
+  function AdminLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading, signIn } = useAdminAuth();
@@ -201,5 +201,12 @@ export default function AdminLoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AdminLoginContent />
+    </Suspense>
   );
 }
