@@ -1,37 +1,64 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { CollectionSectionSkeleton } from "@/components/homepage-section-skeletons";
 import { type AdminProduct, useAdminStore } from "@/lib/admin-store";
 import { subscribeNewArrivalsCollectionFromFirebase } from "@/lib/firebase/new-arrivals";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
+const NEW_ARRIVALS_REMOTE_TIMEOUT_MS = 4000;
+
 export function NewArrivals() {
+  const productsReady = useAdminStore((state) => state.productsReady);
   const products = useAdminStore((state) => state.products);
   const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
   const setNewArrivalsCollectionFromRemote = useAdminStore(
     (state) => state.setNewArrivalsCollectionFromRemote
   );
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
+  const [hasRemoteNewArrivalsCollection, setHasRemoteNewArrivalsCollection] =
+    useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeNewArrivalsCollectionFromFirebase(
       (remoteNewArrivalsCollection) => {
         if (remoteNewArrivalsCollection) {
           setNewArrivalsCollectionFromRemote(remoteNewArrivalsCollection);
+          setHasRemoteNewArrivalsCollection(true);
+        } else {
+          setHasRemoteNewArrivalsCollection(false);
         }
+        setIsRemoteResolved(true);
       }
     );
 
     return unsubscribe;
   }, [setNewArrivalsCollectionFromRemote]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, NEW_ARRIVALS_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   const productMap = new Map(products.map((product) => [product.id, product] as const));
   const newProducts = [...newArrivalsCollection.productIds]
     .reverse()
     .map((productId) => productMap.get(productId))
     .filter((product): product is AdminProduct => Boolean(product));
+
+  if (!productsReady || !isRemoteResolved) {
+    return <CollectionSectionSkeleton backgroundClassName="bg-background" />;
+  }
+
+  if (!hasRemoteNewArrivalsCollection) {
+    return null;
+  }
 
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-background">

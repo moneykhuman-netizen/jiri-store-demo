@@ -3,15 +3,20 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { HeroSectionSkeleton } from "@/components/homepage-section-skeletons";
 import { HERO_BUTTON_LINKS, useAdminStore } from "@/lib/admin-store";
 import { subscribeHeroSlidesFromFirebase } from "@/lib/firebase/hero";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
+const HERO_REMOTE_TIMEOUT_MS = 4000;
+
 export function HeroSection() {
   const slides = useAdminStore((s) => s.heroSlides);
   const setHeroSlidesFromRemote = useAdminStore((s) => s.setHeroSlidesFromRemote);
   const [current, setCurrent] = useState(0);
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
+  const [hasRemoteSlides, setHasRemoteSlides] = useState(false);
   const timeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -22,9 +27,11 @@ export function HeroSection() {
 
       if (remoteSlides === undefined) {
         console.log(
-          "[Hero Firebase][storefront] Received undefined remote heroSlides, preserving current local/default heroSlides",
+          "[Hero Firebase][storefront] Received undefined remote heroSlides, suppressing storefront hero until live content is available",
           { currentLocalSlidesLength }
         );
+        setHasRemoteSlides(false);
+        setIsRemoteResolved(true);
         return;
       }
 
@@ -34,10 +41,20 @@ export function HeroSection() {
       });
 
       setHeroSlidesFromRemote(remoteSlides);
+      setHasRemoteSlides(true);
+      setIsRemoteResolved(true);
     });
 
     return unsubscribe;
   }, [setHeroSlidesFromRemote]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, HERO_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   // autoplay every 5s
   useEffect(() => {
@@ -68,7 +85,9 @@ export function HeroSection() {
     setCurrent((prev) => (prev + 1) % slides.length);
   };
 
-  if (slides.length === 0) return null;
+  if (!isRemoteResolved) return <HeroSectionSkeleton />;
+
+  if (!hasRemoteSlides || slides.length === 0) return null;
 
   const activeIndex = current >= slides.length ? 0 : current;
   const slide = slides[activeIndex];
