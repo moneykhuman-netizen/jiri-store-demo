@@ -4,12 +4,16 @@ import { useAdminStore } from "@/lib/admin-store";
 import { saveProducts, subscribeProducts } from "@/lib/firebase/products";
 
 let isInitialized = false;
+const PRODUCTS_SYNC_TIMEOUT_MS = 4000;
 
 export function initProductsSync() {
   if (isInitialized) return;
   isInitialized = true;
 
   const setProductsFromRemote = useAdminStore.getState().setProductsFromRemote;
+  const fallbackTimer = window.setTimeout(() => {
+    setProductsFromRemote([]);
+  }, PRODUCTS_SYNC_TIMEOUT_MS);
 
   void (async () => {
     try {
@@ -28,11 +32,22 @@ export function initProductsSync() {
       };
 
       await seedProductsIfMissing();
+      const remoteProducts = snapshot.exists()
+        ? snapshot.data().products
+        : [];
+
+      setProductsFromRemote(
+        Array.isArray(remoteProducts) ? remoteProducts : []
+      );
+      window.clearTimeout(fallbackTimer);
 
       subscribeProducts((products) => {
         setProductsFromRemote(products);
+        window.clearTimeout(fallbackTimer);
       });
     } catch (error) {
+      window.clearTimeout(fallbackTimer);
+      setProductsFromRemote([]);
       console.error("Failed to initialize products from Firebase:", error);
     }
   })();

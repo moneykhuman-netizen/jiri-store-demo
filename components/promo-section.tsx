@@ -1,10 +1,13 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PromoBannerSkeleton } from "@/components/homepage-section-skeletons";
 import { Truck, Shield, RotateCcw, Headphones } from "lucide-react";
 import { useAdminStore } from "@/lib/admin-store";
 import { subscribePromoBannerFromFirebase } from "@/lib/firebase/promo";
+
+const PROMO_REMOTE_TIMEOUT_MS = 4000;
 
 const features = [
   {
@@ -32,15 +35,30 @@ const features = [
 export function PromoSection() {
   const promo = useAdminStore((s) => s.promoBanner);
   const setPromoBannerFromRemote = useAdminStore((s) => s.setPromoBannerFromRemote);
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
+  const [hasRemotePromo, setHasRemotePromo] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribePromoBannerFromFirebase((remotePromo) => {
       if (remotePromo) {
         setPromoBannerFromRemote(remotePromo);
+        setHasRemotePromo(true);
+      } else {
+        setHasRemotePromo(false);
       }
+
+      setIsRemoteResolved(true);
     });
 
     return unsubscribe;
+  }, [setPromoBannerFromRemote]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, PROMO_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   return (
@@ -69,49 +87,53 @@ export function PromoSection() {
       </div>
 
       {/* CTA Banner */}
-      <div className="container mx-auto px-4 py-12 md:py-16">
-        <div className="promo-banner relative overflow-hidden rounded-2xl bg-primary p-8 text-center md:p-12 lg:p-16">
-          <div className="promo-sheen pointer-events-none absolute inset-0 opacity-70" />
-          <div className="promo-depth pointer-events-none absolute inset-0 opacity-75" />
-          <div className="promo-vignette pointer-events-none absolute inset-0" />
-          <div className="promo-streak pointer-events-none absolute inset-y-[-24%] -left-1/3 w-1/2 opacity-25" />
-          <div className="promo-orb promo-orb-left pointer-events-none absolute -left-10 top-10 h-40 w-40 rounded-full bg-accent/10 blur-3xl" />
-          <div className="promo-orb promo-orb-right pointer-events-none absolute -right-12 bottom-6 h-48 w-48 rounded-full bg-primary-foreground/10 blur-3xl" />
+      {!isRemoteResolved ? (
+        <PromoBannerSkeleton />
+      ) : hasRemotePromo ? (
+        <div className="container mx-auto px-4 py-12 md:py-16">
+          <div className="promo-banner relative overflow-hidden rounded-2xl bg-primary p-8 text-center md:p-12 lg:p-16">
+            <div className="promo-sheen pointer-events-none absolute inset-0 opacity-70" />
+            <div className="promo-depth pointer-events-none absolute inset-0 opacity-75" />
+            <div className="promo-vignette pointer-events-none absolute inset-0" />
+            <div className="promo-streak pointer-events-none absolute inset-y-[-24%] -left-1/3 w-1/2 opacity-25" />
+            <div className="promo-orb promo-orb-left pointer-events-none absolute -left-10 top-10 h-40 w-40 rounded-full bg-accent/10 blur-3xl" />
+            <div className="promo-orb promo-orb-right pointer-events-none absolute -right-12 bottom-6 h-48 w-48 rounded-full bg-primary-foreground/10 blur-3xl" />
 
-          {/* Decorative Elements */}
-          <div className="absolute top-0 left-0 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground/5" />
-          <div className="absolute bottom-0 right-0 h-48 w-48 translate-x-1/3 translate-y-1/3 rounded-full bg-primary-foreground/5" />
+            {/* Decorative Elements */}
+            <div className="absolute top-0 left-0 h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-foreground/5" />
+            <div className="absolute bottom-0 right-0 h-48 w-48 translate-x-1/3 translate-y-1/3 rounded-full bg-primary-foreground/5" />
 
-          <div className="promo-copy relative z-10">
-            <p className="promo-copy-item mb-4 text-sm uppercase tracking-widest text-primary-foreground/80">
-              {promo.badge}
-            </p>
-            <h2 className="promo-copy-item promo-heading mb-2.5 font-serif text-3xl font-bold tracking-[0.015em] text-primary-foreground md:text-4xl lg:text-5xl">
-              {promo.title}
-            </h2>
-            <p className="promo-copy-item promo-description mx-auto mb-8 max-w-xl text-lg text-primary-foreground/88">
-              {promo.description.split(promo.code).map((part, i, arr) =>
-                i < arr.length - 1 ? (
-                  <span key={i}>
-                    {part}
-                    <span className="font-bold text-primary-foreground">{promo.code}</span>
-                  </span>
-                ) : (
-                  part
-                )
-              )}
-            </p>
-            <Link href="/products" className="promo-copy-item inline-flex">
-              <Button
-                size="lg"
-                className="promo-cta border border-white/10 px-8 font-semibold text-accent-foreground"
-              >
-                Start Shopping
-              </Button>
-            </Link>
+            <div className="promo-copy relative z-10">
+              <p className="promo-copy-item mb-4 text-sm uppercase tracking-widest text-primary-foreground/80">
+                {promo.badge}
+              </p>
+              <h2 className="promo-copy-item promo-heading mb-2.5 font-serif text-3xl font-bold tracking-[0.015em] text-primary-foreground md:text-4xl lg:text-5xl">
+                {promo.title}
+              </h2>
+              <p className="promo-copy-item promo-description mx-auto mb-8 max-w-xl text-lg text-primary-foreground/88">
+                {promo.description.split(promo.code).map((part, i, arr) =>
+                  i < arr.length - 1 ? (
+                    <span key={i}>
+                      {part}
+                      <span className="font-bold text-primary-foreground">{promo.code}</span>
+                    </span>
+                  ) : (
+                    part
+                  )
+                )}
+              </p>
+              <Link href="/products" className="promo-copy-item inline-flex">
+                <Button
+                  size="lg"
+                  className="promo-cta border border-white/10 px-8 font-semibold text-accent-foreground"
+                >
+                  Start Shopping
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       <style jsx>{`
         .promo-banner {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { CategorySectionSkeleton } from "@/components/homepage-section-skeletons";
 import {
   CATEGORY_CARD_LINKS,
   HeroSection,
@@ -11,11 +12,15 @@ import {
 } from "@/lib/admin-store";
 import { subscribeHomepageCategoriesFromFirebase } from "@/lib/firebase/categories";
 
+const CATEGORIES_REMOTE_TIMEOUT_MS = 4000;
+
 export function CategoriesSection() {
   const homepageCategories = useAdminStore((s) => s.homepageCategories);
   const setHomepageCategoriesFromRemote = useAdminStore(
     (s) => s.setHomepageCategoriesFromRemote
   );
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
+  const [hasRemoteCategories, setHasRemoteCategories] = useState(false);
   const categories = (["men", "women"] as HeroSection[]).map(
     (section) => homepageCategories[section]
   );
@@ -24,11 +29,32 @@ export function CategoriesSection() {
     const unsubscribe = subscribeHomepageCategoriesFromFirebase((remoteCategories) => {
       if (remoteCategories) {
         setHomepageCategoriesFromRemote(remoteCategories);
+        setHasRemoteCategories(true);
+      } else {
+        setHasRemoteCategories(false);
       }
+
+      setIsRemoteResolved(true);
     });
 
     return unsubscribe;
   }, [setHomepageCategoriesFromRemote]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, CATEGORIES_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  if (!isRemoteResolved) {
+    return <CategorySectionSkeleton />;
+  }
+
+  if (!hasRemoteCategories) {
+    return null;
+  }
 
   return (
     <section className="py-12 md:py-16 lg:py-20 bg-background">

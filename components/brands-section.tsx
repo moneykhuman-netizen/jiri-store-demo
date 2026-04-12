@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BrandsSectionSkeleton } from "@/components/homepage-section-skeletons";
 import { BrandTheme, useAdminStore } from "@/lib/admin-store";
 import { subscribeBrandsFromFirebase } from "@/lib/firebase/brands";
 import { ChevronRight } from "lucide-react";
+
+const BRANDS_REMOTE_TIMEOUT_MS = 4000;
 
 const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
   Nike: { 
@@ -88,17 +91,32 @@ const brandColors: Record<string, string> = {
 };
 
 export function BrandsSection() {
+  const productsReady = useAdminStore((s) => s.productsReady);
   const brands = useAdminStore((s) => s.brands).slice(0, 6);
   const brandPresentations = useAdminStore((s) => s.brandPresentations);
   const setBrandsFromRemote = useAdminStore((s) => s.setBrandsFromRemote);
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
+  const [hasRemoteBrandConfig, setHasRemoteBrandConfig] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeBrandsFromFirebase((remote) => {
       if (remote) {
         setBrandsFromRemote(remote.brands, remote.brandPresentations);
+        setHasRemoteBrandConfig(true);
+      } else {
+        setHasRemoteBrandConfig(false);
       }
+      setIsRemoteResolved(true);
     });
     return unsubscribe;
+  }, [setBrandsFromRemote]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, BRANDS_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   // light-themed fallback styles for unknown brands
@@ -116,6 +134,10 @@ export function BrandsSection() {
     for (let i = 0; i < brand.length; i++) sum += brand.charCodeAt(i);
     return fallbackStyles[sum % fallbackStyles.length];
   };
+
+  if (!productsReady || !isRemoteResolved) {
+    return <BrandsSectionSkeleton />;
+  }
 
   if (brands.length === 0) {
     return null;
@@ -152,13 +174,17 @@ export function BrandsSection() {
             })();
             const presentation = brandPresentations[brand];
             const theme =
-              presentation?.theme && presentation.theme !== "auto"
+              hasRemoteBrandConfig &&
+              presentation?.theme &&
+              presentation.theme !== "auto"
                 ? themeStyles[presentation.theme]
                 : null;
             const style = theme
               ? { ...baseStyle, bg: theme.bg, accent: theme.accent }
               : baseStyle;
-            const tagline = presentation?.tagline?.trim() ?? "";
+            const tagline = hasRemoteBrandConfig
+              ? presentation?.tagline?.trim() ?? ""
+              : "";
             const colorClassName = brandColors[brand] ?? "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900";
 
             return (

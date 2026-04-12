@@ -545,6 +545,7 @@ const buildCatalogStateFromProducts = ({
 
 interface AdminState {
   isAuthenticated: boolean;
+  productsReady: boolean;
   products: AdminProduct[];
   brands: string[];
   brandPresentations: Record<string, BrandPresentation>;
@@ -640,6 +641,7 @@ export const useAdminStore = create<AdminState>()(
   persist(
     (set, get) => ({
       isAuthenticated: false,
+      productsReady: false,
       products: initialAdminProducts,
       brands: initialBrandsFromProducts,
       brandPresentations: syncBrandPresentations(initialBrandsFromProducts),
@@ -903,13 +905,16 @@ export const useAdminStore = create<AdminState>()(
 
       setProductsFromRemote: (products) => {
         set((state) => {
-          return buildCatalogStateFromProducts({
-            products,
-            brandPresentations: state.brandPresentations,
-            featuredCollection: state.featuredCollection,
-            newArrivalsCollection: state.newArrivalsCollection,
-            managedCategories: state.managedCategories,
-          });
+          return {
+            productsReady: true,
+            ...buildCatalogStateFromProducts({
+              products,
+              brandPresentations: state.brandPresentations,
+              featuredCollection: state.featuredCollection,
+              newArrivalsCollection: state.newArrivalsCollection,
+              managedCategories: state.managedCategories,
+            }),
+          };
         });
       },
 
