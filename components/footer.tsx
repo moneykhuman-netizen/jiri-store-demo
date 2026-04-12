@@ -215,7 +215,7 @@ export function Footer() {
               <li className="flex items-start gap-3.5">
                 <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-primary-foreground/72" />
                 <span className="text-sm leading-6 text-primary-foreground/78">
-                  Babupura, Jiribam, Manipur - 795116<br />
+                  Babupara, Jiribam, Manipur - 795116<br />
                   Near Railway Station
                 </span>
               </li>
@@ -250,9 +250,14 @@ export function Footer() {
 
         {/* Bottom Bar */}
         <div className="mt-10 flex flex-col gap-4 border-t border-primary-foreground/20 pt-7 text-center md:flex-row md:items-center md:justify-between md:text-left">
-          <p className="text-sm text-primary-foreground/60">
-            &copy; {new Date().getFullYear()} <span className="whitespace-nowrap">Pickup Jiristore</span>. All rights reserved.
-          </p>
+          <div>
+            <p className="text-sm text-primary-foreground/60">
+              &copy; {new Date().getFullYear()} <span className="whitespace-nowrap">Pickup Jiristore</span>. All rights reserved.
+            </p>
+            <p className="mt-1 text-xs tracking-wide text-gray-500">
+              Owned by <span className="font-medium text-gray-300">Raj Thouna</span>
+            </p>
+          </div>
           <div className="flex flex-wrap justify-center gap-6 md:justify-end">
             <Link href="/privacy-policy" className="text-sm text-primary-foreground/60 transition-opacity hover:opacity-100">
               Privacy Policy
