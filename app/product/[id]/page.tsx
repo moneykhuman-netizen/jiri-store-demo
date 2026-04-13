@@ -198,7 +198,7 @@ export default function ProductPage({
 
   const generateWhatsAppLink = () => {
     const message = encodeURIComponent(
-      `Hello, I want to order ${product.name} from JIRI Pick Up Store.` +
+      `Hello, I want to order the ${product.name} from Pickup Jiristore.` +
         `${selectedSize ? `\nSize: ${selectedSize}` : ""}` +
         `${selectedColor ? `\nColor: ${selectedColor}` : ""}` +
         `\nPrice: Rs ${product.price.toLocaleString()}`
