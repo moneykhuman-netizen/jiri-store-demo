@@ -22,8 +22,8 @@ const features = [
   },
   {
     icon: RotateCcw,
-    title: "Easy Returns",
-    description: "7-day easy returns",
+    title: "Easy Exchange",
+    description: "T&C apply",
   },
   {
     icon: Headphones,

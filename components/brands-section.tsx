@@ -157,7 +157,7 @@ export function BrandsSection() {
             </h2>
           </div>
           <Link 
-            href="/products" 
+            href="/brands" 
             className="text-muted-foreground hover:text-foreground flex items-center gap-1 mt-4 sm:mt-0 text-sm font-medium transition-colors group"
           >
             View all brands
@@ -215,7 +215,7 @@ export function BrandsSection() {
         {/* All Brands Link for Mobile */}
         <div className="mt-8 text-center lg:hidden">
           <Link
-            href="/products"
+            href="/brands"
             className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-primary/90 active:scale-[0.98]"
           >
             Explore All Brands

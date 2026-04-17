@@ -13,6 +13,11 @@ import { getProductSizeNumbers } from "@/lib/product-inventory";
 import { adaptProductForStorefront } from "@/lib/products/adaptProductForStorefront";
 import Link from "next/link";
 
+const INITIAL_VISIBLE_PRODUCTS = 8;
+const LOAD_MORE_PRODUCTS = 20;
+const PRODUCT_LIST_GRID_CLASSNAME =
+  "grid auto-rows-fr grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 lg:gap-6 xl:grid-cols-4";
+
 const getSortableCreatedAt = (value: unknown) => {
   if (value instanceof Date) {
     const timestamp = value.getTime();
@@ -36,7 +41,7 @@ function ProductsContent() {
   const rawProducts = useAdminStore((state) => state.products);
   const featuredCollection = useAdminStore((state) => state.featuredCollection);
   const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
-  const [visibleCount, setVisibleCount] = useState(8);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
   const allProducts = useMemo(
     () => rawProducts.map(adaptProductForStorefront),
     [rawProducts]
@@ -45,7 +50,8 @@ function ProductsContent() {
   const categoryParam = searchParams.get("category")?.toLowerCase();
   const category =
     categoryParam === "men" || categoryParam === "women" ? categoryParam : null;
-  const brand = searchParams.get("brand");
+  const brandParam = searchParams.get("brand");
+  const brand = brandParam?.trim() ? brandParam.trim() : null;
   const type = searchParams.get("type");
   const size = searchParams.get("size");
   const minPrice = searchParams.get("minPrice");
@@ -151,7 +157,7 @@ function ProductsContent() {
   );
 
   useEffect(() => {
-    setVisibleCount(8);
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
   }, [sortedProducts]);
 
   const pageTitle = search
@@ -160,6 +166,8 @@ function ProductsContent() {
     ? featuredCollection.title
     : newArrivals
     ? newArrivalsCollection.title
+    : brand
+    ? brand
     : category
     ? `${category.charAt(0).toUpperCase() + category.slice(1)}'s Collection`
     : "All Products";
@@ -198,9 +206,9 @@ function ProductsContent() {
               </div>
             ) : (
               <>
-                <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className={PRODUCT_LIST_GRID_CLASSNAME}>
                   {visibleProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                    <ProductCard key={product.id} product={product} compact />
                   ))}
                 </div>
 
@@ -209,7 +217,7 @@ function ProductsContent() {
                     <Button
                       variant="outline"
                       className="shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                      onClick={() => setVisibleCount((prev) => prev + 8)}
+                      onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_PRODUCTS)}
                     >
                       Load More
                     </Button>
