@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -9,32 +9,84 @@ import { ProductFilters } from "@/components/product-filters";
 import { useAdminStore } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { getProductSizeNumbers } from "@/lib/product-inventory";
+import { adaptProductForStorefront } from "@/lib/products/adaptProductForStorefront";
 import Link from "next/link";
+
+const INITIAL_VISIBLE_PRODUCTS = 8;
+const LOAD_MORE_PRODUCTS = 20;
+const PRODUCT_LIST_GRID_CLASSNAME =
+  "grid auto-rows-fr grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 lg:gap-6 xl:grid-cols-4";
+
+const getSortableCreatedAt = (value: unknown) => {
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  return null;
+};
 
 function ProductsContent() {
   const searchParams = useSearchParams();
-  const products = useAdminStore((state) => state.products);
-  
-  const category = searchParams.get("category") as "men" | "women" | null;
-  const brand = searchParams.get("brand");
+  const rawProducts = useAdminStore((state) => state.products);
+  const featuredCollection = useAdminStore((state) => state.featuredCollection);
+  const newArrivalsCollection = useAdminStore((state) => state.newArrivalsCollection);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
+  const allProducts = useMemo(
+    () => rawProducts.map(adaptProductForStorefront),
+    [rawProducts]
+  );
+
+  const categoryParam = searchParams.get("category")?.toLowerCase();
+  const category =
+    categoryParam === "men" || categoryParam === "women" ? categoryParam : null;
+  const brandParam = searchParams.get("brand");
+  const brand = brandParam?.trim() ? brandParam.trim() : null;
   const type = searchParams.get("type");
   const size = searchParams.get("size");
   const minPrice = searchParams.get("minPrice");
   const maxPrice = searchParams.get("maxPrice");
   const search = searchParams.get("search");
+  const featured = searchParams.get("featured") === "true";
+  const newArrivals = searchParams.get("newArrivals") === "true";
+  const featuredProductIds = useMemo(
+    () => new Set(featuredCollection.productIds),
+    [featuredCollection.productIds]
+  );
+  const newArrivalProductIds = useMemo(
+    () => new Set(newArrivalsCollection.productIds),
+    [newArrivalsCollection.productIds]
+  );
 
   const filteredProducts = useMemo(() => {
+    // Always start from the full products backbone, then apply page filters.
     let result = search
-      ? products.filter((p) =>
+      ? allProducts.filter((p) =>
           p.name.toLowerCase().includes(search.toLowerCase()) ||
           p.brand.toLowerCase().includes(search.toLowerCase()) ||
           p.type.toLowerCase().includes(search.toLowerCase()) ||
           p.description.toLowerCase().includes(search.toLowerCase())
         )
-      : [...products];
+      : [...allProducts];
 
+    if (featured) {
+      result = result.filter((p) => featuredProductIds.has(p.id));
+    }
+    if (newArrivals) {
+      result = result.filter((p) => newArrivalProductIds.has(p.id));
+    }
     if (category) {
-      result = result.filter((p) => p.category === category);
+      result = result.filter((p) => p.category?.toLowerCase() === category);
     }
     if (brand) {
       result = result.filter((p) => p.brand === brand);
@@ -43,7 +95,9 @@ function ProductsContent() {
       result = result.filter((p) => p.type === type);
     }
     if (size) {
-      result = result.filter((p) => p.sizes.includes(parseInt(size)));
+      result = result.filter((p) =>
+        getProductSizeNumbers(p).includes(parseInt(size))
+      );
     }
     if (minPrice) {
       result = result.filter((p) => p.price >= parseInt(minPrice));
@@ -53,10 +107,67 @@ function ProductsContent() {
     }
 
     return result;
-  }, [category, brand, type, size, minPrice, maxPrice, search, products]);
+  }, [
+    category,
+    brand,
+    type,
+    size,
+    minPrice,
+    maxPrice,
+    search,
+    featured,
+    newArrivals,
+    allProducts,
+    featuredProductIds,
+    newArrivalProductIds,
+  ]);
+
+  const sortedProducts = useMemo(() => {
+    return [...filteredProducts].sort((a, b) => {
+      const aIsNewArrival =
+        a.newArrival === true || a.isNew === true || newArrivalProductIds.has(a.id);
+      const bIsNewArrival =
+        b.newArrival === true || b.isNew === true || newArrivalProductIds.has(b.id);
+
+      if (aIsNewArrival && !bIsNewArrival) return -1;
+      if (!aIsNewArrival && bIsNewArrival) return 1;
+
+      const aIsFeatured =
+        a.featured === true || a.isFeatured === true || featuredProductIds.has(a.id);
+      const bIsFeatured =
+        b.featured === true || b.isFeatured === true || featuredProductIds.has(b.id);
+
+      if (aIsFeatured && !bIsFeatured) return -1;
+      if (!aIsFeatured && bIsFeatured) return 1;
+
+      const aCreatedAt = getSortableCreatedAt(a.createdAt);
+      const bCreatedAt = getSortableCreatedAt(b.createdAt);
+
+      if (aCreatedAt !== null && bCreatedAt !== null && aCreatedAt !== bCreatedAt) {
+        return bCreatedAt - aCreatedAt;
+      }
+
+      return 0;
+    });
+  }, [filteredProducts, featuredProductIds, newArrivalProductIds]);
+
+  const visibleProducts = useMemo(
+    () => sortedProducts.slice(0, visibleCount),
+    [sortedProducts, visibleCount]
+  );
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+  }, [sortedProducts]);
 
   const pageTitle = search
     ? `Search Results for "${search}"`
+    : featured
+    ? featuredCollection.title
+    : newArrivals
+    ? newArrivalsCollection.title
+    : brand
+    ? brand
     : category
     ? `${category.charAt(0).toUpperCase() + category.slice(1)}'s Collection`
     : "All Products";
@@ -69,7 +180,7 @@ function ProductsContent() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Filters Sidebar */}
           <aside className="lg:w-64 flex-shrink-0">
-            <ProductFilters currentCategory={category} />
+            <ProductFilters currentCategory={category ?? undefined} />
           </aside>
 
           {/* Products Grid */}
@@ -79,26 +190,40 @@ function ProductsContent() {
                 {pageTitle}
               </h1>
               <span className="text-sm text-muted-foreground">
-                {filteredProducts.length} products
+                {sortedProducts.length} products
               </span>
             </div>
 
-            {filteredProducts.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <div className="text-center py-16">
                 <h2 className="text-xl font-semibold mb-2">No products found</h2>
                 <p className="text-muted-foreground mb-6">
                   Try adjusting your filters or search terms.
                 </p>
                 <Link href="/products">
-                  <Button variant="outline">Clear Filters</Button>
+                  <Button variant="outline" className="shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">Clear Filters</Button>
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className={PRODUCT_LIST_GRID_CLASSNAME}>
+                  {visibleProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} compact />
+                  ))}
+                </div>
+
+                {visibleCount < sortedProducts.length ? (
+                  <div className="mt-8 flex justify-center">
+                    <Button
+                      variant="outline"
+                      className="shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_PRODUCTS)}
+                    >
+                      Load More
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </div>
@@ -114,7 +239,7 @@ export default function ProductsPage() {
     <Suspense
       fallback={
         <main className="min-h-screen bg-background">
-          <div className="container mx-auto px-4 py-16 flex justify-center">
+          <div className="container mx-auto px-4 py-16 flex justify-center animate-pulse">
             <Spinner />
           </div>
         </main>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useAdminStore } from "@/lib/admin-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,40 +16,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Search, Trash2, Package, AlertTriangle } from "lucide-react";
-import Link from "next/link";
 
 export default function DeleteProductPage() {
   const products = useAdminStore((state) => state.products);
   const deleteProduct = useAdminStore((state) => state.deleteProduct);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = normalizedQuery
+    ? products.filter((product) => {
+        return (
+          product.name.toLowerCase().includes(normalizedQuery) ||
+          product.id.toLowerCase().includes(normalizedQuery) ||
+          product.category.toLowerCase().includes(normalizedQuery)
+        );
+      })
+    : products;
 
-  const productInfo = productToDelete
-    ? products.find((p) => p.id === productToDelete)
-    : null;
+  const productInfo =
+    productToDelete === null
+      ? null
+      : products.find((product) => product.id === productToDelete) ?? null;
 
   const handleDelete = () => {
-    if (productToDelete) {
-      deleteProduct(productToDelete);
-      setProductToDelete(null);
+    if (!productToDelete) {
+      return;
     }
+
+    deleteProduct(productToDelete);
+    setProductToDelete(null);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
         <div>
@@ -57,86 +62,72 @@ export default function DeleteProductPage() {
         </div>
       </div>
 
-      {/* Warning */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="font-medium text-amber-800">Caution</p>
-          <p className="text-sm text-amber-700">
-            Deleting a product is permanent and cannot be undone. Make sure you want to remove the product before confirming.
-          </p>
-        </div>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Deleting a product is permanent and cannot be undone.
       </div>
 
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by product name or brand..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-2">
+        <label htmlFor="delete-product-search" className="text-sm font-medium">
+          Search Products
+        </label>
+        <Input
+          id="delete-product-search"
+          placeholder="Search by product name, id, or category..."
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
+      </div>
 
-      {/* Products List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Products ({filteredProducts.length})</CardTitle>
-          <CardDescription>Select a product to delete</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {filteredProducts.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No products found</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      <Package className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {product.brand} • Stock: {product.stock}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setProductToDelete(product.id)}
-                    className="ml-4 flex-shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
+          {filteredProducts.length} product{filteredProducts.length === 1 ? "" : "s"}
+        </div>
+
+        {filteredProducts.length === 0 ? (
+          <div className="px-4 py-8 text-sm text-muted-foreground">No products found.</div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {filteredProducts.map((product) => (
+              <li
+                key={product.id}
+                className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 space-y-1">
+                  <p className="break-words font-medium">{product.name}</p>
+                  <p className="break-all text-xs text-muted-foreground">ID: {product.id}</p>
+                  <p className="text-sm text-muted-foreground capitalize">
+                    Category: {product.category}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setProductToDelete(product.id)}
+                  className="w-full sm:w-auto"
+                >
+                  Delete
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <AlertDialog
+        open={productToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProductToDelete(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Product?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{productInfo?.name}</strong>?
-              This action cannot be undone.
+              Are you sure you want to delete <strong>{productInfo?.name}</strong>? This action
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

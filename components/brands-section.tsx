@@ -1,70 +1,46 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BrandsSectionSkeleton } from "@/components/homepage-section-skeletons";
 import { useAdminStore } from "@/lib/admin-store";
+import { subscribeBrandsFromFirebase } from "@/lib/firebase/brands";
+import {
+  getBrandLogoText,
+  getPremiumBrandCardClassName,
+} from "@/lib/brand-card-styles";
 import { ChevronRight } from "lucide-react";
 
-const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
-  Nike: { 
-    bg: "bg-gradient-to-br from-neutral-900 to-neutral-800", 
-    accent: "text-white",
-    logo: "NIKE"
-  },
-  Adidas: { 
-    bg: "bg-gradient-to-br from-neutral-900 to-neutral-700", 
-    accent: "text-white",
-    logo: "adidas"
-  },
-  Puma: { 
-    bg: "bg-gradient-to-br from-red-600 to-red-700", 
-    accent: "text-white",
-    logo: "PUMA"
-  },
-  Reebok: { 
-    bg: "bg-gradient-to-br from-red-700 to-red-800", 
-    accent: "text-white",
-    logo: "Reebok"
-  },
-  Skechers: { 
-    bg: "bg-gradient-to-br from-blue-600 to-blue-700", 
-    accent: "text-white",
-    logo: "SKECHERS"
-  },
-  "New Balance": { 
-    bg: "bg-gradient-to-br from-neutral-800 to-neutral-900", 
-    accent: "text-red-500",
-    logo: "NB"
-  },
-  Clarks: {
-    bg: "bg-gradient-to-br from-yellow-700 to-yellow-800",
-    accent: "text-white",
-    logo: "CLARKS"
-  },
-  Woodland: {
-    bg: "bg-gradient-to-br from-green-700 to-green-800",
-    accent: "text-white",
-    logo: "WOODLAND"
-  },
-};
+const BRANDS_REMOTE_TIMEOUT_MS = 4000;
 
 export function BrandsSection() {
+  const productsReady = useAdminStore((s) => s.productsReady);
   const brands = useAdminStore((s) => s.brands).slice(0, 6);
+  const brandPresentations = useAdminStore((s) => s.brandPresentations);
+  const setBrandsFromRemote = useAdminStore((s) => s.setBrandsFromRemote);
+  const [isRemoteResolved, setIsRemoteResolved] = useState(false);
 
-  // light-themed fallback styles for unknown brands
-  const fallbackStyles = [
-    { bg: "bg-yellow-100", accent: "text-black" },
-    { bg: "bg-blue-100", accent: "text-black" },
-    { bg: "bg-pink-100", accent: "text-black" },
-    { bg: "bg-green-100", accent: "text-black" },
-    { bg: "bg-orange-100", accent: "text-black" },
-    { bg: "bg-purple-100", accent: "text-black" },
-  ];
+  useEffect(() => {
+    const unsubscribe = subscribeBrandsFromFirebase((remote) => {
+      if (remote) {
+        setBrandsFromRemote(remote.brands, remote.brandPresentations);
+      }
+      setIsRemoteResolved(true);
+    });
+    return unsubscribe;
+  }, [setBrandsFromRemote]);
 
-  const computeFallback = (brand: string) => {
-    let sum = 0;
-    for (let i = 0; i < brand.length; i++) sum += brand.charCodeAt(i);
-    return fallbackStyles[sum % fallbackStyles.length];
-  };
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsRemoteResolved(true);
+    }, BRANDS_REMOTE_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  if (!productsReady || !isRemoteResolved) {
+    return <BrandsSectionSkeleton />;
+  }
 
   if (brands.length === 0) {
     return null;
@@ -84,7 +60,7 @@ export function BrandsSection() {
             </h2>
           </div>
           <Link 
-            href="/products" 
+            href="/brands" 
             className="text-muted-foreground hover:text-foreground flex items-center gap-1 mt-4 sm:mt-0 text-sm font-medium transition-colors group"
           >
             View all brands
@@ -95,40 +71,31 @@ export function BrandsSection() {
         {/* Brands Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {brands.map((brand) => {
-            const style = brandStyles[brand] || (() => {
-              const f = computeFallback(brand);
-              return { bg: f.bg, accent: f.accent, logo: brand };
-            })();
+            const presentation = brandPresentations[brand];
+            const tagline = presentation?.tagline?.trim() ?? "";
+            const colorClassName = getPremiumBrandCardClassName(brand, presentation?.theme);
+            const logoText = getBrandLogoText(brand);
+
             return (
               <Link
                 key={brand}
                 href={`/products?brand=${encodeURIComponent(brand)}`}
-                className={`${style.bg} rounded-2xl p-6 md:p-8 flex flex-col items-center justify-center aspect-square relative overflow-hidden group transition-all duration-300 hover:scale-[1.02] hover:shadow-xl`}
+                className={`${colorClassName} rounded-xl text-center flex flex-col items-center justify-center h-[110px] p-5 relative overflow-hidden group shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]`}
               >
                 {/* Brand Logo Text */}
-                <span className={`text-2xl md:text-3xl font-black tracking-tight ${style.accent} text-center z-10`}>
-                  {style.logo}
+                <span className="text-sm font-semibold text-center leading-tight line-clamp-2 z-10">
+                  {logoText}
                 </span>
                 
                 {/* Subtle tagline */}
-                <span className="text-white/60 text-xs mt-2 font-medium uppercase tracking-wider z-10">
-                  {brand === "New Balance" ? "Fresh Foam" : 
-                   brand === "Nike" ? "Just Do It" :
-                   brand === "Adidas" ? "Impossible is Nothing" :
-                   brand === "Puma" ? "Forever Faster" :
-                   brand === "Reebok" ? "Be More Human" :
-                   brand === "Skechers" ? "Comfort Tech" : ""}
-                </span>
+                {tagline ? (
+                  <span className="text-xs mt-1 text-center line-clamp-2 tracking-wide opacity-70 z-10">
+                    {tagline}
+                  </span>
+                ) : null}
 
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                
-                {/* Shop Now indicator */}
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-                  <span className="text-white text-xs font-semibold bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">
-                    Shop Now
-                  </span>
-                </div>
               </Link>
             );
           })}
@@ -137,8 +104,8 @@ export function BrandsSection() {
         {/* All Brands Link for Mobile */}
         <div className="mt-8 text-center lg:hidden">
           <Link
-            href="/products"
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium hover:bg-primary/90 transition-colors"
+            href="/brands"
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-primary/90 active:scale-[0.98]"
           >
             Explore All Brands
             <ChevronRight className="w-4 h-4" />

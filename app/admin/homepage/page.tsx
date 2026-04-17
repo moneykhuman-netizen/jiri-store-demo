@@ -1,12 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, Trash2, Edit3 } from "lucide-react";
-import { useAdminStore, HeroSlide, PromoBanner, SocialLinks } from "@/lib/admin-store";
+import { ArrowLeft, Edit3, ImagePlus, Save, Trash2, Upload } from "lucide-react";
+import {
+  CATEGORY_CARD_LINKS,
+  FeaturedCollectionSettings,
+  HERO_BUTTON_LINKS,
+  HeroSection,
+  HeroSlide,
+  HomepageCategoryCard,
+  normalizeSocialLinks,
+  PromoBanner,
+  SocialLinks,
+  useAdminStore,
+} from "@/lib/admin-store";
+import { saveHomepageCategoriesToFirebase } from "@/lib/firebase/categories";
+import { saveFeaturedCollectionToFirebase } from "@/lib/firebase/featured";
+import { saveHeroSlidesToFirebase } from "@/lib/firebase/hero";
+import { saveNewArrivalsCollectionToFirebase } from "@/lib/firebase/new-arrivals";
+import { savePromoBannerToFirebase } from "@/lib/firebase/promo";
+import { saveSocialLinksToFirebase } from "@/lib/firebase/social";
+import {
+  uploadHomepageCategoryImage,
+  uploadHomepageHeroImage,
+} from "@/lib/firebase/storage";
+import {
+  getActionFeedbackClassName,
+  getActionFeedbackLabel,
+  useActionFeedback,
+} from "@/hooks/use-action-feedback";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -14,120 +38,528 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+const HERO_SUBMIT_LABELS = {
+  idle: "Add Slide",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
+
+const HERO_UPDATE_LABELS = {
+  idle: "Update Slide",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
+
+const HERO_UPLOAD_LABELS = {
+  idle: "Upload Hero Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const CATEGORY_UPLOAD_LABELS = {
+  idle: "Upload Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const SAVE_LABELS = {
+  idle: "Save",
+  running: "Saving...",
+  success: "Saved ✓",
+  error: "Retry",
+};
+
+const createEmptySlide = (section: HeroSection = "women"): HeroSlide => ({
+  id: "",
+  badge: "",
+  title: "",
+  description: "",
+  buttonText: "",
+  image: "",
+  section,
+});
 
 export default function HomepageSettingsPage() {
   const slides = useAdminStore((s) => s.heroSlides);
   const addHeroSlide = useAdminStore((s) => s.addHeroSlide);
   const updateHeroSlide = useAdminStore((s) => s.updateHeroSlide);
   const deleteHeroSlide = useAdminStore((s) => s.deleteHeroSlide);
+  const homepageCategories = useAdminStore((s) => s.homepageCategories);
+  const updateHomepageCategory = useAdminStore((s) => s.updateHomepageCategory);
+  const products = useAdminStore((s) => s.products);
+  const featuredCollection = useAdminStore((s) => s.featuredCollection);
+  const updateFeaturedCollection = useAdminStore((s) => s.updateFeaturedCollection);
+  const newArrivalsCollection = useAdminStore((s) => s.newArrivalsCollection);
+  const updateNewArrivalsCollection = useAdminStore((s) => s.updateNewArrivalsCollection);
   const promo = useAdminStore((s) => s.promoBanner);
   const updatePromo = useAdminStore((s) => s.updatePromoBanner);
   const social = useAdminStore((s) => s.socialLinks);
   const updateSocial = useAdminStore((s) => s.updateSocialLinks);
 
   const [activeTab, setActiveTab] = useState("hero");
-
-  const emptySlide: HeroSlide = {
-    id: "",
-    badge: "",
-    title: "",
-    description: "",
-    buttonText: "",
-    buttonLink: "",
-    image: "",
-  };
   const [editingSlide, setEditingSlide] = useState<HeroSlide | null>(null);
-  const [slideForm, setSlideForm] = useState<HeroSlide>(emptySlide);
+  const [slideForm, setSlideForm] = useState<HeroSlide>(createEmptySlide());
+  const [slideImageError, setSlideImageError] = useState<string | null>(null);
+  const [categoryForms, setCategoryForms] = useState<
+    Record<HeroSection, HomepageCategoryCard>
+  >(homepageCategories);
+  const [featuredForm, setFeaturedForm] = useState<FeaturedCollectionSettings>(
+    featuredCollection
+  );
+  const [newArrivalsForm, setNewArrivalsForm] = useState<FeaturedCollectionSettings>(
+    newArrivalsCollection
+  );
   const [promoForm, setPromoForm] = useState<PromoBanner>(promo);
-  const [socialForm, setSocialForm] = useState<SocialLinks>(social);
+  const [socialForm, setSocialForm] = useState<SocialLinks>(normalizeSocialLinks(social));
+  const [slideUploadFile, setSlideUploadFile] = useState<File | null>(null);
+  const [slideUploadInputKey, setSlideUploadInputKey] = useState(0);
+  const [slideActionError, setSlideActionError] = useState<string | null>(null);
+  const [categoryActionError, setCategoryActionError] = useState<string | null>(null);
+  const [categoryUploadFiles, setCategoryUploadFiles] = useState<
+    Record<HeroSection, File | null>
+  >({
+    men: null,
+    women: null,
+  });
+  const [categoryUploadInputKeys, setCategoryUploadInputKeys] = useState<
+    Record<HeroSection, number>
+  >({
+    men: 0,
+    women: 0,
+  });
+  const { statuses, setStatus, resetStatus, runAction } = useActionFeedback({
+    heroSubmit: "idle",
+    heroImageUpload: "idle",
+    categoriesSubmit: "idle",
+    featuredSubmit: "idle",
+    newArrivalsSubmit: "idle",
+    promoSubmit: "idle",
+    socialSubmit: "idle",
+    categoryMenUpload: "idle",
+    categoryWomenUpload: "idle",
+  });
+  const availableProductIds = new Set(products.map((product) => product.id));
 
-  const resetSlideForm = () => {
-    setSlideForm(emptySlide);
+  useEffect(() => {
+    setCategoryForms(homepageCategories);
+  }, [homepageCategories]);
+
+  useEffect(() => {
+    setFeaturedForm(featuredCollection);
+  }, [featuredCollection]);
+
+  useEffect(() => {
+    setNewArrivalsForm(newArrivalsCollection);
+  }, [newArrivalsCollection]);
+
+  useEffect(() => {
+    setSocialForm(normalizeSocialLinks(social));
+  }, [social]);
+
+  const clearSlideUploadInput = () => {
+    setSlideUploadFile(null);
+    setSlideUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const clearCategoryUploadInput = (section: HeroSection) => {
+    setCategoryUploadFiles((current) => ({
+      ...current,
+      [section]: null,
+    }));
+    setCategoryUploadInputKeys((current) => ({
+      ...current,
+      [section]: current[section] + 1,
+    }));
+  };
+
+  const updateSlideForm = (updates: Partial<HeroSlide>) => {
+    resetStatus("heroSubmit");
+    setSlideActionError(null);
+    setSlideForm((current) => ({
+      ...current,
+      ...updates,
+    }));
+  };
+
+  const updateCategoryForm = (
+    section: HeroSection,
+    updates: Partial<HomepageCategoryCard>
+  ) => {
+    resetStatus("categoriesSubmit");
+    setCategoryActionError(null);
+    setCategoryForms((current) => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        ...updates,
+      },
+    }));
+  };
+
+  const resetSlideForm = (section: HeroSection = slideForm.section) => {
+    setSlideForm(createEmptySlide(section));
+    setSlideImageError(null);
     setEditingSlide(null);
+    setSlideActionError(null);
+    clearSlideUploadInput();
+    setStatus("heroImageUpload", "idle");
+    setStatus("heroSubmit", "idle");
   };
 
-  const handleSlideSubmit = (e: React.FormEvent) => {
+  const handleSlideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingSlide) {
-      updateHeroSlide(slideForm);
-    } else {
-      addHeroSlide({ ...slideForm, id: Date.now().toString() });
+    const image = slideForm.image.trim();
+
+    if (!image) {
+      setSlideImageError("Hero image is required.");
+      return;
     }
-    resetSlideForm();
+
+    const nextSlide = {
+      ...slideForm,
+      id: slideForm.id || editingSlide?.id || Date.now().toString(),
+      image,
+    };
+    const wasEditingSlide = Boolean(editingSlide);
+
+    try {
+      await runAction("heroSubmit", async () => {
+        if (wasEditingSlide) {
+          updateHeroSlide(nextSlide);
+        } else {
+          addHeroSlide(nextSlide);
+        }
+
+        const latestSlides = useAdminStore.getState().heroSlides;
+        await saveHeroSlidesToFirebase(latestSlides);
+        resetSlideForm(nextSlide.section);
+      });
+    } catch (error) {
+      console.error("Failed to save hero slides to Firebase:", error);
+      setSlideActionError("We couldn't save that hero slide right now. Please try again.");
+      setEditingSlide(nextSlide);
+      setSlideForm(nextSlide);
+    }
   };
 
-  const handlePromoSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    updatePromo(promoForm);
+  const handleSlideImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("heroImageUpload");
+    setSlideActionError(null);
+
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setSlideUploadFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("image/")) {
+      clearSlideUploadInput();
+      setSlideActionError("Please choose an image file for the hero slide.");
+      return;
+    }
+
+    setSlideUploadFile(nextFile);
   };
 
-  const handleSocialSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateSocial(socialForm);
+  const handleSlideImageUpload = async () => {
+    if (!slideUploadFile) {
+      return;
+    }
+
+    try {
+      await runAction("heroImageUpload", async () => {
+        const uploadedImageUrl = await uploadHomepageHeroImage(
+          slideUploadFile,
+          slideForm.section,
+          slideForm.id || editingSlide?.id
+        );
+
+        updateSlideForm({ image: uploadedImageUrl });
+        setSlideImageError(null);
+        clearSlideUploadInput();
+      });
+    } catch (error) {
+      console.error("Failed to upload hero image:", error);
+      setSlideActionError("We couldn't upload that hero image right now. Please try again.");
+    }
   };
+
+  const handleDeleteSlide = (id: string) => {
+    if (editingSlide?.id === id) {
+      resetSlideForm(slideForm.section);
+    }
+
+    deleteHeroSlide(id);
+    const latestSlides = useAdminStore.getState().heroSlides;
+
+    console.log("[Hero Firebase][admin] Local Hero slide delete succeeded", {
+      latestSlidesLength: latestSlides.length,
+    });
+    console.log("[Hero Firebase][admin] Starting remote Firebase write for Hero slides", {
+      latestSlidesLength: latestSlides.length,
+    });
+
+    void (async () => {
+      try {
+        await saveHeroSlidesToFirebase(latestSlides);
+      } catch (error) {
+        console.error("Failed to save hero slides to Firebase:", error);
+      }
+    })();
+  };
+
+  const handlePromoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await runAction("promoSubmit", async () => {
+        updatePromo(promoForm);
+        await savePromoBannerToFirebase(promoForm);
+      });
+    } catch (error) {
+      console.error("Failed to save promo banner to Firebase:", error);
+    }
+  };
+
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await runAction("categoriesSubmit", async () => {
+        updateHomepageCategory(categoryForms.men);
+        updateHomepageCategory(categoryForms.women);
+        await saveHomepageCategoriesToFirebase({
+          men: categoryForms.men,
+          women: categoryForms.women,
+        });
+      });
+    } catch (error) {
+      console.error("Failed to save homepage categories to Firebase:", error);
+      setCategoryActionError("We couldn't save those category cards right now. Please try again.");
+    }
+  };
+
+  const handleFeaturedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await runAction("featuredSubmit", async () => {
+        updateFeaturedCollection({
+          ...featuredForm,
+          title: featuredForm.title.trim(),
+          description: featuredForm.description.trim(),
+          productIds: featuredForm.productIds.filter(
+            (productId, index, productIds) =>
+              availableProductIds.has(productId) &&
+              productIds.indexOf(productId) === index
+          ),
+        });
+
+        const latestFeaturedCollection = useAdminStore.getState().featuredCollection;
+        await saveFeaturedCollectionToFirebase(latestFeaturedCollection);
+      });
+    } catch (error) {
+      console.error("Failed to save featured collection to Firebase:", error);
+    }
+  };
+
+  const handleSocialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await runAction("socialSubmit", async () => {
+        const nextSocialLinks = normalizeSocialLinks(socialForm);
+
+        await saveSocialLinksToFirebase(nextSocialLinks);
+        updateSocial(nextSocialLinks);
+      });
+    } catch (error) {
+      console.error("Failed to save social links to Firebase:", error);
+    }
+  };
+
+  const handleNewArrivalsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await runAction("newArrivalsSubmit", async () => {
+        updateNewArrivalsCollection({
+          ...newArrivalsForm,
+          title: newArrivalsForm.title.trim(),
+          description: newArrivalsForm.description.trim(),
+          productIds: newArrivalsForm.productIds.filter(
+            (productId, index, productIds) =>
+              availableProductIds.has(productId) &&
+              productIds.indexOf(productId) === index
+          ),
+        });
+
+        const latestNewArrivalsCollection = useAdminStore.getState().newArrivalsCollection;
+        await saveNewArrivalsCollectionToFirebase(latestNewArrivalsCollection);
+      });
+    } catch (error) {
+      console.error("Failed to save new arrivals collection to Firebase:", error);
+    }
+  };
+
+  const handleCategoryImageFileChange =
+    (section: HeroSection) => (event: ChangeEvent<HTMLInputElement>) => {
+      resetStatus(section === "men" ? "categoryMenUpload" : "categoryWomenUpload");
+      setCategoryActionError(null);
+
+      const nextFile = event.target.files?.[0] ?? null;
+      if (!nextFile) {
+        setCategoryUploadFiles((current) => ({
+          ...current,
+          [section]: null,
+        }));
+        return;
+      }
+
+      if (!nextFile.type.startsWith("image/")) {
+        clearCategoryUploadInput(section);
+        setCategoryActionError("Please choose an image file for the category card.");
+        return;
+      }
+
+      setCategoryUploadFiles((current) => ({
+        ...current,
+        [section]: nextFile,
+      }));
+    };
+
+  const handleCategoryImageUpload = async (section: HeroSection) => {
+    const actionKey = section === "men" ? "categoryMenUpload" : "categoryWomenUpload";
+    const nextFile = categoryUploadFiles[section];
+
+    if (!nextFile) {
+      return;
+    }
+
+    try {
+      await runAction(actionKey, async () => {
+        const uploadedImageUrl = await uploadHomepageCategoryImage(nextFile, section);
+        updateCategoryForm(section, { image: uploadedImageUrl });
+        clearCategoryUploadInput(section);
+      });
+    } catch (error) {
+      console.error(`Failed to upload ${section} category image:`, error);
+      setCategoryActionError("We couldn't upload that category image right now. Please try again.");
+    }
+  };
+
+  const validFeaturedProductIds = featuredForm.productIds.filter(
+    (productId, index, productIds) =>
+      availableProductIds.has(productId) &&
+      productIds.indexOf(productId) === index
+  );
+  const selectedFeaturedIds = new Set(validFeaturedProductIds);
+  const validNewArrivalsProductIds = newArrivalsForm.productIds.filter(
+    (productId, index, productIds) =>
+      availableProductIds.has(productId) &&
+      productIds.indexOf(productId) === index
+  );
+  const selectedNewArrivalsIds = new Set(validNewArrivalsProductIds);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 items-center gap-4">
         <Link href="/admin/dashboard">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </Link>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Homepage Settings</h1>
           <p className="text-muted-foreground">Manage homepage content</p>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="hero">Hero Slides</TabsTrigger>
-          <TabsTrigger value="promo">Promo Banner</TabsTrigger>
-          <TabsTrigger value="social">Social Links</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-3 xl:grid-cols-6">
+          <TabsTrigger value="hero" className="w-full whitespace-normal text-center">
+            Hero Slides
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="w-full whitespace-normal text-center">
+            Category Cards
+          </TabsTrigger>
+          <TabsTrigger value="featured" className="w-full whitespace-normal text-center">
+            Featured
+          </TabsTrigger>
+          <TabsTrigger value="new-arrivals" className="w-full whitespace-normal text-center">
+            New Arrivals
+          </TabsTrigger>
+          <TabsTrigger value="promo" className="w-full whitespace-normal text-center">
+            Promo Banner
+          </TabsTrigger>
+          <TabsTrigger value="social" className="w-full whitespace-normal text-center">
+            Social Links
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="hero">
+        <TabsContent value="hero" className="min-w-0">
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Existing Slides</CardTitle>
               <CardDescription>Manage homepage hero slides</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0">
               {slides.length === 0 ? (
                 <p className="text-muted-foreground">No slides added yet</p>
               ) : (
                 <div className="space-y-4">
-                  {slides.map((s) => (
+                  {slides.map((slide) => (
                     <div
-                      key={s.id}
-                      className="flex items-center justify-between p-4 border border-border rounded-lg"
+                      key={slide.id}
+                      className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div className="flex-1">
-                        <p className="font-semibold">{s.title || "(no title)"}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words font-semibold">{slide.title || "(no title)"}</p>
                         <p className="text-xs text-muted-foreground">
-                          {s.badge}
+                          {slide.section === "men" ? "Men" : "Women"} hero
+                          {slide.badge ? ` - ${slide.badge}` : ""}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex justify-end gap-2 sm:justify-start">
                         <Button
                           size="icon"
                           variant="ghost"
                           onClick={() => {
-                            setEditingSlide(s);
-                            setSlideForm(s);
+                            setEditingSlide(slide);
+                            setSlideForm({ ...slide });
+                            setSlideImageError(null);
+                            setSlideActionError(null);
+                            setStatus("heroSubmit", "idle");
+                            setStatus("heroImageUpload", "idle");
                           }}
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
                           className="text-destructive hover:text-destructive"
-                          onClick={() => deleteHeroSlide(s.id)}
+                          onClick={() => handleDeleteSlide(slide.id)}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -140,71 +572,455 @@ export default function HomepageSettingsPage() {
           <form onSubmit={handleSlideSubmit} className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {editingSlide ? "Edit Slide" : "Add New Slide"}
-                </CardTitle>
+                <CardTitle>{editingSlide ? "Edit Slide" : "Add New Slide"}</CardTitle>
                 <CardDescription>
-                  Each slide should include image, text and link
+                  Each slide should include image, text and section. CTA routing is fixed by section.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="min-w-0 space-y-4">
+                <Select
+                  value={slideForm.section}
+                  onValueChange={(value: HeroSection) => updateSlideForm({ section: value })}
+                >
+                  <SelectTrigger className="w-full min-w-0 max-w-full">
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="men">Men&apos;s Hero</SelectItem>
+                    <SelectItem value="women">Women&apos;s Hero</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Input
                   placeholder="Badge"
                   value={slideForm.badge}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, badge: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ badge: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
+
                 <Input
                   placeholder="Title"
                   value={slideForm.title}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, title: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ title: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
+
                 <Textarea
                   placeholder="Description"
                   rows={2}
                   value={slideForm.description}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, description: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ description: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
+
                 <Input
                   placeholder="Button Text"
                   value={slideForm.buttonText}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, buttonText: e.target.value })
-                  }
+                  onChange={(e) => updateSlideForm({ buttonText: e.target.value })}
+                  className="w-full min-w-0 max-w-full"
                 />
-                <Input
-                  placeholder="Button Link"
-                  value={slideForm.buttonLink}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, buttonLink: e.target.value })
-                  }
-                />
+
+                <p className="break-all text-sm text-muted-foreground">
+                  CTA destination: {HERO_BUTTON_LINKS[slideForm.section]}
+                </p>
+
                 <Input
                   placeholder="Image URL"
                   value={slideForm.image}
-                  onChange={(e) =>
-                    setSlideForm({ ...slideForm, image: e.target.value })
-                  }
+                  aria-invalid={Boolean(slideImageError)}
+                  onChange={(e) => {
+                    const image = e.target.value;
+                    updateSlideForm({ image });
+                    if (slideImageError && image.trim()) {
+                      setSlideImageError(null);
+                    }
+                  }}
+                  className="w-full min-w-0 max-w-full"
                 />
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    key={slideUploadInputKey}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSlideImageFileChange}
+                    disabled={statuses.heroImageUpload === "running"}
+                    className="w-full min-w-0 max-w-full"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSlideImageUpload}
+                    disabled={statuses.heroImageUpload === "running" || !slideUploadFile}
+                    className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.heroImageUpload))}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {getActionFeedbackLabel(statuses.heroImageUpload, HERO_UPLOAD_LABELS)}
+                  </Button>
+                </div>
+                {slideImageError ? (
+                  <p className="text-sm text-destructive">{slideImageError}</p>
+                ) : null}
+                {slideActionError ? (
+                  <p className="text-sm text-destructive">{slideActionError}</p>
+                ) : null}
               </CardContent>
             </Card>
-            <div className="flex justify-end gap-3">
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {editingSlide && (
                 <Button
                   variant="outline"
                   type="button"
-                  onClick={resetSlideForm}
+                  onClick={() => resetSlideForm()}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
               )}
-              <Button type="submit">
-                {editingSlide ? "Update Slide" : "Add Slide"}
+              <Button
+                type="submit"
+                disabled={statuses.heroSubmit === "running"}
+                className={cn("w-full sm:w-auto", getActionFeedbackClassName(statuses.heroSubmit))}
+              >
+                <ImagePlus className="h-4 w-4" />
+                {getActionFeedbackLabel(
+                  statuses.heroSubmit,
+                  editingSlide ? HERO_UPDATE_LABELS : HERO_SUBMIT_LABELS
+                )}
+              </Button>
+            </div>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="categories">
+          <form onSubmit={handleCategorySubmit} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Shop By Category Cards</CardTitle>
+                <CardDescription>
+                  Update the content for the men&apos;s and women&apos;s category cards. Routing stays fixed by section.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-6 md:grid-cols-2">
+                {(["men", "women"] as HeroSection[]).map((section) => {
+                  const card = categoryForms[section];
+
+                  return (
+                    <div
+                      key={section}
+                      className="space-y-4 rounded-lg border border-border p-4"
+                    >
+                      <div>
+                        <p className="font-semibold">
+                          {section === "men" ? "Men's Card" : "Women's Card"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Explore route: {CATEGORY_CARD_LINKS[section]}
+                        </p>
+                      </div>
+
+                      <Input
+                        placeholder="Top Label (optional)"
+                        value={card.label}
+                        onChange={(e) => updateCategoryForm(section, { label: e.target.value })}
+                      />
+
+                      <Input
+                        placeholder="Title"
+                        value={card.title}
+                        onChange={(e) => updateCategoryForm(section, { title: e.target.value })}
+                      />
+
+                      <Input
+                        placeholder="Subtitle / Description"
+                        value={card.description}
+                        onChange={(e) =>
+                          updateCategoryForm(section, { description: e.target.value })
+                        }
+                      />
+
+                      <Input
+                        placeholder="Image URL"
+                        value={card.image}
+                        onChange={(e) => updateCategoryForm(section, { image: e.target.value })}
+                      />
+
+                      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                        <Input
+                          key={categoryUploadInputKeys[section]}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleCategoryImageFileChange(section)}
+                          disabled={
+                            statuses[section === "men" ? "categoryMenUpload" : "categoryWomenUpload"] ===
+                            "running"
+                          }
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => handleCategoryImageUpload(section)}
+                          disabled={
+                            statuses[section === "men" ? "categoryMenUpload" : "categoryWomenUpload"] ===
+                              "running" || !categoryUploadFiles[section]
+                          }
+                          className={cn(
+                            getActionFeedbackClassName(
+                              statuses[
+                                section === "men" ? "categoryMenUpload" : "categoryWomenUpload"
+                              ]
+                            )
+                          )}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {getActionFeedbackLabel(
+                            statuses[
+                              section === "men" ? "categoryMenUpload" : "categoryWomenUpload"
+                            ],
+                            CATEGORY_UPLOAD_LABELS
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {categoryActionError ? (
+              <p className="text-sm text-destructive">{categoryActionError}</p>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <Button
+                type="submit"
+                disabled={statuses.categoriesSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.categoriesSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.categoriesSubmit, SAVE_LABELS)} Category Cards`}
+              </Button>
+            </div>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="featured">
+          <form onSubmit={handleFeaturedSubmit} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Featured Collection</CardTitle>
+                <CardDescription>
+                  Choose which products appear on the homepage featured grid. Product cards and
+                  the View All link stay unchanged.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Section Title"
+                    value={featuredForm.title}
+                    onChange={(e) =>
+                      setFeaturedForm((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <Textarea
+                    placeholder="Section Description"
+                    rows={2}
+                    value={featuredForm.description}
+                    onChange={(e) =>
+                      setFeaturedForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <p className="text-sm text-muted-foreground">
+                    Selected products: {validFeaturedProductIds.length}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold">Choose Products</p>
+                    <p className="text-sm text-muted-foreground">
+                      Selected products are saved in the admin store and shown in the same product
+                      card layout on the homepage.
+                    </p>
+                  </div>
+
+                  {products.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No products available yet.</p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {products.map((product) => {
+                        const checkboxId = `featured-product-${product.id}`;
+                        const isChecked = selectedFeaturedIds.has(product.id);
+
+                        return (
+                          <div
+                            key={product.id}
+                            className="flex items-start gap-3 rounded-lg border border-border p-4"
+                          >
+                            <Checkbox
+                              id={checkboxId}
+                              checked={isChecked}
+                              onCheckedChange={(checked) =>
+                                setFeaturedForm((prev) => ({
+                                  ...prev,
+                                  productIds:
+                                    checked === true
+                                      ? prev.productIds.includes(product.id)
+                                        ? prev.productIds
+                                        : [...prev.productIds, product.id]
+                                      : prev.productIds.filter(
+                                          (productId) => productId !== product.id
+                                        ),
+                                }))
+                              }
+                            />
+                            <Label
+                              htmlFor={checkboxId}
+                              className="flex-1 cursor-pointer flex-col items-start gap-1"
+                            >
+                              <span className="text-sm font-medium leading-none">
+                                {product.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {product.brand} | {product.category} | Rs. {product.price}
+                              </span>
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                type="submit"
+                disabled={statuses.featuredSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.featuredSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.featuredSubmit, SAVE_LABELS)} Featured Collection`}
+              </Button>
+            </div>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="new-arrivals">
+          <form onSubmit={handleNewArrivalsSubmit} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>New Arrivals</CardTitle>
+                <CardDescription>
+                  Choose which products appear on the homepage new arrivals grid. Product cards and
+                  the View All link stay unchanged.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Section Title"
+                    value={newArrivalsForm.title}
+                    onChange={(e) =>
+                      setNewArrivalsForm((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <Textarea
+                    placeholder="Section Description"
+                    rows={2}
+                    value={newArrivalsForm.description}
+                    onChange={(e) =>
+                      setNewArrivalsForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                  />
+
+                  <p className="text-sm text-muted-foreground">
+                    Selected products: {validNewArrivalsProductIds.length}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold">Choose Products</p>
+                    <p className="text-sm text-muted-foreground">
+                      Selected products are saved in the admin store and shown in the same product
+                      card layout on the homepage.
+                    </p>
+                  </div>
+
+                  {products.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No products available yet.</p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {products.map((product) => {
+                        const checkboxId = `new-arrivals-product-${product.id}`;
+                        const isChecked = selectedNewArrivalsIds.has(product.id);
+
+                        return (
+                          <div
+                            key={product.id}
+                            className="flex items-start gap-3 rounded-lg border border-border p-4"
+                          >
+                            <Checkbox
+                              id={checkboxId}
+                              checked={isChecked}
+                              onCheckedChange={(checked) =>
+                                setNewArrivalsForm((prev) => ({
+                                  ...prev,
+                                  productIds:
+                                    checked === true
+                                      ? prev.productIds.includes(product.id)
+                                        ? prev.productIds
+                                        : [...prev.productIds, product.id]
+                                      : prev.productIds.filter(
+                                          (productId) => productId !== product.id
+                                        ),
+                                }))
+                              }
+                            />
+                            <Label
+                              htmlFor={checkboxId}
+                              className="flex-1 cursor-pointer flex-col items-start gap-1"
+                            >
+                              <span className="text-sm font-medium leading-none">
+                                {product.name}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {product.brand} | {product.category} | Rs. {product.price}
+                              </span>
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                type="submit"
+                disabled={statuses.newArrivalsSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.newArrivalsSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.newArrivalsSubmit, SAVE_LABELS)} New Arrivals`}
               </Button>
             </div>
           </form>
@@ -250,8 +1066,13 @@ export default function HomepageSettingsPage() {
               </CardContent>
             </Card>
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="w-4 h-4 mr-2" /> Save Promo
+              <Button
+                type="submit"
+                disabled={statuses.promoSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.promoSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.promoSubmit, SAVE_LABELS)} Promo`}
               </Button>
             </div>
           </form>
@@ -286,11 +1107,30 @@ export default function HomepageSettingsPage() {
                     setSocialForm({ ...socialForm, whatsapp: e.target.value })
                   }
                 />
+                <Input
+                  placeholder="YouTube URL"
+                  value={socialForm.youtube}
+                  onChange={(e) =>
+                    setSocialForm({ ...socialForm, youtube: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="Telegram URL"
+                  value={socialForm.telegram}
+                  onChange={(e) =>
+                    setSocialForm({ ...socialForm, telegram: e.target.value })
+                  }
+                />
               </CardContent>
             </Card>
             <div className="flex justify-end gap-3">
-              <Button type="submit">
-                <Save className="w-4 h-4 mr-2" /> Save Links
+              <Button
+                type="submit"
+                disabled={statuses.socialSubmit === "running"}
+                className={cn(getActionFeedbackClassName(statuses.socialSubmit))}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {`${getActionFeedbackLabel(statuses.socialSubmit, SAVE_LABELS)} Links`}
               </Button>
             </div>
           </form>

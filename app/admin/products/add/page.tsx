@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminStore, type AdminProduct } from "@/lib/admin-store";
+import { uploadProductImage, uploadProductVideo } from "@/lib/firebase/storage";
+import { DEFAULT_PRODUCT_IMAGE } from "@/lib/products";
+import {
+  getActionFeedbackClassName,
+  getActionFeedbackLabel,
+  useActionFeedback,
+} from "@/hooks/use-action-feedback";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,12 +18,36 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Plus, X, Save } from "lucide-react";
+import { ArrowLeft, ExternalLink, Film, ImagePlus, Plus, Save, Upload, X } from "lucide-react";
 import Link from "next/link";
+import { QUICK_SELECT_SIZES, distributeStockAcrossSizes } from "@/lib/product-inventory";
 
-const sizeOptions = {
-  men: [6, 7, 8, 9, 10, 11, 12],
-  women: [4, 5, 6, 7, 8, 9],
+const ADD_PRODUCT_LABELS = {
+  idle: "Add Product",
+  running: "Adding...",
+  success: "Added ✓",
+  error: "Retry",
+};
+
+const ADD_IMAGE_LABELS = {
+  idle: "Add Image",
+  running: "Adding...",
+  success: "Added âœ“",
+  error: "Retry",
+};
+
+const UPLOAD_IMAGE_LABELS = {
+  idle: "Upload Images",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
+
+const UPLOAD_VIDEO_LABELS = {
+  idle: "Upload Video",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
 };
 
 const colorOptions = [
@@ -37,6 +69,7 @@ export default function AddProductPage() {
   const brands = useAdminStore((state) => state.brands);
   const categories = useAdminStore((state) => state.categories);
   const addProduct = useAdminStore((state) => state.addProduct);
+  const draftProductIdRef = useRef(`p${Date.now()}`);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -47,51 +80,218 @@ export default function AddProductPage() {
     originalPrice: "",
     description: "",
     stock: "",
-    imageUrl: "",
+    videoUrl: "",
   });
 
   const [selectedSizes, setSelectedSizes] = useState<number[]>([]);
+  const [customSize, setCustomSize] = useState("");
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [customColor, setCustomColor] = useState("");
   const [features, setFeatures] = useState<string[]>([""]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isNew, setIsNew] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [imageUploadInputKey, setImageUploadInputKey] = useState(0);
+  const [videoUploadInputKey, setVideoUploadInputKey] = useState(0);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { statuses, resetStatus, runAction } = useActionFeedback({
+    addProduct: "idle",
+    addImage: "idle",
+    uploadImage: "idle",
+    uploadVideo: "idle",
+  });
+
+  const updateFormData = (updates: Partial<typeof formData>) => {
+    resetStatus("addProduct");
+    setSubmitError(null);
+    setFormData((current) => ({
+      ...current,
+      ...updates,
+    }));
+  };
+
+  const clearImageUploadInput = () => {
+    setSelectedImageFiles([]);
+    setImageUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const clearVideoUploadInput = () => {
+    setSelectedVideoFile(null);
+    setVideoUploadInputKey((currentKey) => currentKey + 1);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    const price = parseInt(formData.price) || 0;
-    const originalPrice = parseInt(formData.originalPrice) || price;
-    const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+    setSubmitError(null);
 
-    const stockVal = parseInt(formData.stock) || 0;
-    const newProduct: AdminProduct = {
-      id: `p${Date.now()}`,
-      name: formData.name,
-      brand: formData.brand,
-      category: formData.category as "men" | "women",
-      type: formData.type,
-      price,
-      originalPrice,
-      discount,
-      rating: 4.0,
-      reviews: 0,
-      sizes: selectedSizes,
-      colors: selectedColors,
-      images: formData.imageUrl ? [formData.imageUrl] : ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80"],
-      description: formData.description,
-      features: features.filter((f) => f.trim() !== ""),
-      inStock: stockVal > 0,
-      isFeatured,
-      isNew,
-      stock: stockVal,
-    };
+    try {
+      await runAction("addProduct", async () => {
+        const price = parseInt(formData.price, 10) || 0;
+        const originalPrice = parseInt(formData.originalPrice, 10) || price;
+        const discount =
+          originalPrice > price
+            ? Math.round(((originalPrice - price) / originalPrice) * 100)
+            : 0;
 
-    addProduct(newProduct);
-    
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    router.push("/admin/products/edit");
+        const stockVal = parseInt(formData.stock, 10) || 0;
+        const normalizedSelectedSizes = [...new Set(selectedSizes)].sort((a, b) => a - b);
+        const sizeInventory = distributeStockAcrossSizes(normalizedSelectedSizes, stockVal);
+        const trimmedVideoUrl = formData.videoUrl.trim();
+        const newProduct: AdminProduct = {
+          id: draftProductIdRef.current,
+          name: formData.name,
+          brand: formData.brand,
+          category: formData.category as "men" | "women",
+          type: formData.type,
+          price,
+          originalPrice,
+          discount,
+          rating: 4.0,
+          reviews: 0,
+          sizes: normalizedSelectedSizes,
+          sizeInventory,
+          colors: selectedColors.map((color) => color.trim()).filter(Boolean),
+          images: productImages.length > 0 ? productImages : [DEFAULT_PRODUCT_IMAGE],
+          ...(trimmedVideoUrl ? { videoUrl: trimmedVideoUrl } : {}),
+          description: formData.description,
+          features: features.filter((feature) => feature.trim() !== ""),
+          inStock: stockVal > 0,
+          isFeatured,
+          isNew,
+          stock: stockVal,
+        };
+
+        addProduct(newProduct);
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        router.push("/admin/products/edit");
+      });
+    } catch (error) {
+      console.error("Failed to add product:", error);
+      setSubmitError("We couldn't add that product right now. Please try again.");
+    }
+  };
+
+  const handleImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("addImage");
+    resetStatus("uploadImage");
+    setMediaError(null);
+
+    const nextFiles = Array.from(event.target.files ?? []);
+    if (nextFiles.length === 0) {
+      setSelectedImageFiles([]);
+      return;
+    }
+
+    if (nextFiles.some((file) => !file.type.startsWith("image/"))) {
+      clearImageUploadInput();
+      setMediaError("Please choose image files only.");
+      return;
+    }
+
+    setSelectedImageFiles(nextFiles);
+  };
+
+  const handleVideoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    resetStatus("uploadVideo");
+    setMediaError(null);
+
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setSelectedVideoFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("video/")) {
+      clearVideoUploadInput();
+      setMediaError("Please choose a video file.");
+      return;
+    }
+
+    setSelectedVideoFile(nextFile);
+  };
+
+  const handleAddImage = async () => {
+    try {
+      await runAction("addImage", () => {
+        const trimmedImageUrl = newImageUrl.trim();
+
+        if (!trimmedImageUrl) {
+          throw new Error("Enter an image URL before adding it.");
+        }
+
+        if (productImages.includes(trimmedImageUrl)) {
+          throw new Error("That image URL is already attached to this product.");
+        }
+
+        setProductImages((current) => [...current, trimmedImageUrl]);
+        setNewImageUrl("");
+        setMediaError(null);
+      });
+    } catch (error) {
+      setMediaError(
+        error instanceof Error
+          ? error.message
+          : "We couldn't add that image right now. Please try again."
+      );
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setProductImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
+    setMediaError(null);
+  };
+
+  const handleUploadImage = async () => {
+    if (selectedImageFiles.length === 0) {
+      return;
+    }
+
+    try {
+      await runAction("uploadImage", async () => {
+        const uploadedImageUrls: string[] = [];
+
+        for (const imageFile of selectedImageFiles) {
+          const uploadedImageUrl = await uploadProductImage(
+            imageFile,
+            draftProductIdRef.current
+          );
+          uploadedImageUrls.push(uploadedImageUrl);
+        }
+
+        setProductImages((current) => [...current, ...uploadedImageUrls]);
+        clearImageUploadInput();
+        setMediaError(null);
+      });
+    } catch (error) {
+      console.error("Failed to upload add-product image:", error);
+      setMediaError("We couldn't upload that image right now. Please try again.");
+    }
+  };
+
+  const handleUploadVideo = async () => {
+    if (!selectedVideoFile) {
+      return;
+    }
+
+    try {
+      await runAction("uploadVideo", async () => {
+        const uploadedVideoUrl = await uploadProductVideo(
+          selectedVideoFile,
+          draftProductIdRef.current
+        );
+        updateFormData({ videoUrl: uploadedVideoUrl });
+        clearVideoUploadInput();
+        setMediaError(null);
+      });
+    } catch (error) {
+      console.error("Failed to upload add-product video:", error);
+      setMediaError("We couldn't upload that video right now. Please try again.");
+    }
   };
 
   const addFeature = () => {
@@ -114,13 +314,51 @@ export default function AddProductPage() {
     );
   };
 
+  const addCustomSize = () => {
+    const parsedSize = parseInt(customSize, 10);
+    if (!Number.isFinite(parsedSize) || parsedSize < 1) {
+      return;
+    }
+
+    setSelectedSizes((prev) => (prev.includes(parsedSize) ? prev : [...prev, parsedSize]));
+    setCustomSize("");
+  };
+
   const toggleColor = (color: string) => {
     setSelectedColors((prev) =>
       prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
     );
   };
 
-  const availableSizes = formData.category ? sizeOptions[formData.category] : [];
+  const addCustomColor = () => {
+    const trimmedColor = customColor.trim();
+    if (!trimmedColor) {
+      return;
+    }
+
+    setSelectedColors((prev) => {
+      if (prev.some((color) => color.toLowerCase() === trimmedColor.toLowerCase())) {
+        return prev;
+      }
+
+      return [...prev, trimmedColor];
+    });
+    setCustomColor("");
+  };
+
+  const updateColor = (index: number, value: string) => {
+    setSelectedColors((prev) =>
+      prev.map((color, colorIndex) => (colorIndex === index ? value : color))
+    );
+  };
+
+  const removeColor = (index: number) => {
+    setSelectedColors((prev) => prev.filter((_, colorIndex) => colorIndex !== index));
+  };
+
+  const availableSizes = Array.from(new Set([...QUICK_SELECT_SIZES, ...selectedSizes])).sort(
+    (a, b) => a - b
+  );
   const availableTypes = formData.category ? categories[formData.category] : [];
 
   return (
@@ -153,7 +391,7 @@ export default function AddProductPage() {
                   id="name"
                   placeholder="e.g., Air Max Running Shoe"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => updateFormData({ name: e.target.value })}
                   required
                 />
               </div>
@@ -161,7 +399,7 @@ export default function AddProductPage() {
                 <Label htmlFor="brand">Brand *</Label>
                 <Select
                   value={formData.brand}
-                  onValueChange={(value) => setFormData({ ...formData, brand: value })}
+                  onValueChange={(value) => updateFormData({ brand: value })}
                   required
                 >
                   <SelectTrigger>
@@ -186,8 +424,9 @@ export default function AddProductPage() {
                 <Select
                   value={formData.category}
                   onValueChange={(value) => {
-                    setFormData({ ...formData, category: value as "men" | "women", type: "" });
+                    updateFormData({ category: value as "men" | "women", type: "" });
                     setSelectedSizes([]);
+                    setCustomSize("");
                   }}
                   required
                 >
@@ -204,7 +443,7 @@ export default function AddProductPage() {
                 <Label htmlFor="type">Product Type *</Label>
                 <Select
                   value={formData.type}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  onValueChange={(value) => updateFormData({ type: value })}
                   disabled={!formData.category}
                   required
                 >
@@ -230,7 +469,7 @@ export default function AddProductPage() {
                 id="description"
                 placeholder="Describe the product..."
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => updateFormData({ description: e.target.value })}
                 rows={3}
               />
             </div>
@@ -252,7 +491,7 @@ export default function AddProductPage() {
                   type="number"
                   placeholder="e.g., 4999"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  onChange={(e) => updateFormData({ price: e.target.value })}
                   required
                 />
               </div>
@@ -263,7 +502,7 @@ export default function AddProductPage() {
                   type="number"
                   placeholder="e.g., 6999"
                   value={formData.originalPrice}
-                  onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                  onChange={(e) => updateFormData({ originalPrice: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -273,7 +512,7 @@ export default function AddProductPage() {
                   type="number"
                   placeholder="e.g., 50"
                   value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  onChange={(e) => updateFormData({ stock: e.target.value })}
                   required
                 />
               </div>
@@ -289,23 +528,57 @@ export default function AddProductPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
-              <Label>Available Sizes (UK)</Label>
+              <Label>Available Sizes</Label>
               {formData.category ? (
-                <div className="flex flex-wrap gap-2">
-                  {availableSizes.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => toggleSize(size)}
-                      className={`w-12 h-12 rounded-lg border-2 font-medium transition-colors ${
-                        selectedSizes.includes(size)
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Common sizes: {QUICK_SELECT_SIZES.join(", ")}
+                    </p>
+                    {selectedSizes.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Selected: {[...selectedSizes].sort((a, b) => a - b).join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableSizes.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => toggleSize(size)}
+                        className={`w-12 h-12 rounded-lg border-2 font-medium transition-colors ${
+                          selectedSizes.includes(size)
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Add custom size"
+                      value={customSize}
+                      onChange={(event) => setCustomSize(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addCustomSize();
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" onClick={addCustomSize}>
+                      Add Size
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sizes are saved exactly as entered. Total stock is distributed across the
+                    selected sizes, and you can fine-tune per-size stock later from Edit Product.
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Select a category first</p>
@@ -314,21 +587,62 @@ export default function AddProductPage() {
 
             <div className="space-y-3">
               <Label>Available Colors</Label>
-              <div className="flex flex-wrap gap-2">
-                {colorOptions.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => toggleColor(color)}
-                    className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
-                      selectedColors.includes(color)
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    {color}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {colorOptions.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => toggleColor(color)}
+                      className={`px-3 py-1.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                        selectedColors.includes(color)
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedColors.length > 0 && (
+                  <div className="space-y-2">
+                    {selectedColors.map((color, index) => (
+                      <div key={`${color}-${index}`} className="flex gap-2">
+                        <Input
+                          value={color}
+                          onChange={(e) => updateColor(index, e.target.value)}
+                          placeholder={`Color ${index + 1}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeColor(index)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add custom color"
+                    value={customColor}
+                    onChange={(e) => setCustomColor(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomColor();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addCustomColor}>
+                    Add Color
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -367,25 +681,182 @@ export default function AddProductPage() {
           </CardContent>
         </Card>
 
-        {/* Image */}
+        {/* Product Media */}
         <Card>
           <CardHeader>
-            <CardTitle>Product Image</CardTitle>
-            <CardDescription>Add product image URL</CardDescription>
+            <CardTitle>Product Media</CardTitle>
+            <CardDescription>
+              Add product images now. The first image stays primary by default unless you change it
+              later from Edit Product.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="imageUrl">Image URL</Label>
+          <CardContent className="space-y-6">
+            {mediaError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {mediaError}
+              </div>
+            ) : null}
+
+            <div className="space-y-4 rounded-lg border border-border p-4">
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium">Images ({productImages.length})</p>
+                  <span className="text-xs text-muted-foreground">
+                    The first saved image stays primary until you change it later.
+                  </span>
+                </div>
+
+                {productImages.length > 0 ? (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {productImages.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="min-w-0 space-y-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
+                          <img
+                            src={image}
+                            alt={`Product image ${index + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          {index === 0 ? (
+                            <div className="absolute left-2 top-2 rounded bg-primary px-2 py-1 text-xs text-primary-foreground">
+                              Primary
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="min-w-0 space-y-2">
+                          <p className="break-all text-xs text-muted-foreground">{image}</p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRemoveImage(index)}
+                              className="w-full text-destructive hover:text-destructive sm:w-auto"
+                            >
+                              Remove
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild className="w-full sm:w-auto">
+                              <a href={image} target="_blank" rel="noreferrer">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Open
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to keep the default product image for now.
+                  </p>
+                )}
+
+                <div className="rounded-lg border border-border p-4">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      type="url"
+                      placeholder="https://example.com/product-image.jpg"
+                      value={newImageUrl}
+                      onChange={(event) => {
+                        resetStatus("addImage");
+                        setMediaError(null);
+                        setNewImageUrl(event.target.value);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddImage}
+                      disabled={statuses.addImage === "running" || !newImageUrl.trim()}
+                      className={cn(getActionFeedbackClassName(statuses.addImage))}
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                      {getActionFeedbackLabel(statuses.addImage, ADD_IMAGE_LABELS)}
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      key={imageUploadInputKey}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageFileChange}
+                      disabled={statuses.uploadImage === "running"}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleUploadImage}
+                      disabled={statuses.uploadImage === "running" || selectedImageFiles.length === 0}
+                      className={cn(getActionFeedbackClassName(statuses.uploadImage))}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
+                    </Button>
+                  </div>
+
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    URL fallback stays supported, and file uploads append images in upload order.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-lg border border-border p-4">
+              <div className="space-y-1">
+                <Label htmlFor="videoUrl">Product Video (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  URL fallback stays supported. Uploading stores the returned video URL in the same
+                  optional field.
+                </p>
+              </div>
+
               <Input
-                id="imageUrl"
+                id="videoUrl"
                 type="url"
-                placeholder="https://example.com/image.jpg"
-                value={formData.imageUrl}
-                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                placeholder="https://example.com/product-video.mp4"
+                value={formData.videoUrl}
+                onChange={(e) => {
+                  resetStatus("uploadVideo");
+                  setMediaError(null);
+                  updateFormData({ videoUrl: e.target.value });
+                }}
               />
-              <p className="text-xs text-muted-foreground">
-                Leave empty to use a default product image
-              </p>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <Input
+                  key={videoUploadInputKey}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleVideoFileChange}
+                  disabled={statuses.uploadVideo === "running"}
+                />
+                <Button
+                  type="button"
+                  onClick={handleUploadVideo}
+                  disabled={statuses.uploadVideo === "running" || !selectedVideoFile}
+                  className={cn(getActionFeedbackClassName(statuses.uploadVideo))}
+                >
+                  <Film className="h-4 w-4" />
+                  {getActionFeedbackLabel(statuses.uploadVideo, UPLOAD_VIDEO_LABELS)}
+                </Button>
+              </div>
+
+              {formData.videoUrl.trim() ? (
+                <Button variant="ghost" size="sm" asChild>
+                  <a href={formData.videoUrl.trim()} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Open Video
+                  </a>
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep the product image-only.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -420,16 +891,22 @@ export default function AddProductPage() {
           </CardContent>
         </Card>
 
+        {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
+
         {/* Submit */}
-        <div className="flex gap-3 justify-end">
+        <div className="flex justify-end gap-3">
           <Link href="/admin/dashboard">
             <Button type="button" variant="outline">
               Cancel
             </Button>
           </Link>
-          <Button type="submit" disabled={isSubmitting}>
-            <Save className="w-4 h-4 mr-2" />
-            {isSubmitting ? "Adding..." : "Add Product"}
+          <Button
+            type="submit"
+            disabled={statuses.addProduct === "running"}
+            className={cn(getActionFeedbackClassName(statuses.addProduct))}
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {getActionFeedbackLabel(statuses.addProduct, ADD_PRODUCT_LABELS)}
           </Button>
         </div>
       </form>

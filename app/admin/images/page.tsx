@@ -2,38 +2,100 @@
 
 import { useState } from "react";
 import { useAdminStore } from "@/lib/admin-store";
+import { uploadProductImage } from "@/lib/firebase/storage";
+import {
+  getActionFeedbackClassName,
+  getActionFeedbackLabel,
+  useActionFeedback,
+} from "@/hooks/use-action-feedback";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, ImagePlus, Package, Save, X, ExternalLink } from "lucide-react";
+import { ArrowLeft, ImagePlus, Package, X } from "lucide-react";
 import Link from "next/link";
+
+const ADD_IMAGE_LABELS = {
+  idle: "Add Image",
+  running: "Adding...",
+  success: "Added ✓",
+  error: "Retry",
+};
+
+const UPLOAD_IMAGE_LABELS = {
+  idle: "Upload Image",
+  running: "Uploading...",
+  success: "Uploaded ✓",
+  error: "Retry",
+};
 
 export default function ImagesPage() {
   const products = useAdminStore((state) => state.products);
-  const updateProduct = useAdminStore((state) => state.updateProduct);
+  const updateProductImages = useAdminStore((state) => state.updateProductImages);
 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const [uploadInputKey, setUploadInputKey] = useState(0);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const { statuses, resetStatus, runAction } = useActionFeedback({
+    addImage: "idle",
+    uploadImage: "idle",
+  });
 
   const selectedProduct = products.find((p) => p.id === selectedProductId);
 
+  const clearUploadInput = () => {
+    setSelectedUploadFile(null);
+    setUploadInputKey((currentKey) => currentKey + 1);
+  };
+
+  const showSuccessMessage = (message: string) => {
+    setErrorMessage("");
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(""), 3000);
+  };
+
+  const showErrorMessage = (message: string) => {
+    setSuccessMessage("");
+    setErrorMessage(message);
+    setTimeout(() => setErrorMessage(""), 4000);
+  };
+
   const handleAddImage = () => {
-    if (selectedProduct && newImageUrl.trim()) {
-      const updatedImages = [...selectedProduct.images, newImageUrl.trim()];
-      updateProduct(selectedProductId, { images: updatedImages });
+    void runAction("addImage", () => {
+      if (!selectedProduct || !newImageUrl.trim()) {
+        throw new Error("Enter an image URL before adding it.");
+      }
+
+      const trimmedImageUrl = newImageUrl.trim();
+      const updatedImages = [...selectedProduct.images, trimmedImageUrl];
+      updateProductImages(selectedProductId, updatedImages);
       setNewImageUrl("");
-      setSuccessMessage("Image added successfully!");
-      setTimeout(() => setSuccessMessage(""), 3000);
-    }
+      showSuccessMessage("Image added successfully!");
+    }).catch((error) => {
+      showErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "We couldn't add that image right now. Please try again."
+      );
+    });
   };
 
   const handleRemoveImage = (index: number) => {
     if (selectedProduct) {
+      if (selectedProduct.images.length <= 1) {
+        showErrorMessage("At least one product image is required.");
+        return;
+      }
+
       const updatedImages = selectedProduct.images.filter((_, i) => i !== index);
-      updateProduct(selectedProductId, { images: updatedImages });
+      updateProductImages(selectedProductId, updatedImages);
+      showSuccessMessage("Image removed successfully!");
     }
   };
 
@@ -42,7 +104,62 @@ export default function ImagesPage() {
       const updatedImages = [...selectedProduct.images];
       const [removed] = updatedImages.splice(index, 1);
       updatedImages.unshift(removed);
-      updateProduct(selectedProductId, { images: updatedImages });
+      updateProductImages(selectedProductId, updatedImages);
+      showSuccessMessage("Primary image updated successfully!");
+    }
+  };
+
+  const handleUploadFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    resetStatus("uploadImage");
+    const nextFile = event.target.files?.[0] ?? null;
+
+    if (!nextFile) {
+      setSelectedUploadFile(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith("image/")) {
+      clearUploadInput();
+      showErrorMessage("Please choose an image file.");
+      return;
+    }
+
+    setErrorMessage("");
+    setSelectedUploadFile(nextFile);
+  };
+
+  const handleUploadImage = async () => {
+    if (!selectedProduct || !selectedUploadFile || isUploadingImage) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setSuccessMessage("");
+    setErrorMessage("");
+
+    try {
+      await runAction("uploadImage", async () => {
+        const uploadedImageUrl = await uploadProductImage(
+          selectedUploadFile,
+          selectedProductId
+        );
+        const currentProduct = useAdminStore
+          .getState()
+          .products.find((product) => product.id === selectedProductId);
+        const updatedImages = [
+          ...(currentProduct?.images ?? selectedProduct.images),
+          uploadedImageUrl,
+        ];
+
+        updateProductImages(selectedProductId, updatedImages);
+        clearUploadInput();
+        showSuccessMessage("Image uploaded successfully!");
+      });
+    } catch (error) {
+      console.error("Failed to upload product image:", error);
+      showErrorMessage("We couldn't upload that image right now. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -147,12 +264,19 @@ export default function ImagesPage() {
           <Card>
             <CardHeader>
               <CardTitle>Add New Image</CardTitle>
-              <CardDescription>Enter an image URL to add to this product</CardDescription>
+              <CardDescription>
+                Enter an image URL or upload a file to add to this product
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {successMessage && (
                 <div className="bg-green-50 text-green-700 px-4 py-2 rounded-lg text-sm">
                   {successMessage}
+                </div>
+              )}
+              {errorMessage && (
+                <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+                  {errorMessage}
                 </div>
               )}
               <div className="flex gap-3">
@@ -163,12 +287,40 @@ export default function ImagesPage() {
                     type="url"
                     placeholder="https://example.com/image.jpg"
                     value={newImageUrl}
-                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    onChange={(e) => {
+                      resetStatus("addImage");
+                      setNewImageUrl(e.target.value);
+                    }}
                   />
                 </div>
-                <Button onClick={handleAddImage} disabled={!newImageUrl.trim()}>
+                <Button
+                  onClick={handleAddImage}
+                  disabled={!newImageUrl.trim() || statuses.addImage === "running"}
+                  className={cn(getActionFeedbackClassName(statuses.addImage))}
+                >
                   <ImagePlus className="w-4 h-4 mr-2" />
-                  Add Image
+                  {getActionFeedbackLabel(statuses.addImage, ADD_IMAGE_LABELS)}
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div className="flex-1">
+                  <Label htmlFor="imageUpload" className="sr-only">Upload Image File</Label>
+                  <Input
+                    key={uploadInputKey}
+                    id="imageUpload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadFileChange}
+                    disabled={isUploadingImage}
+                  />
+                </div>
+                <Button
+                  onClick={handleUploadImage}
+                  disabled={!selectedUploadFile || isUploadingImage}
+                  className={cn(getActionFeedbackClassName(statuses.uploadImage))}
+                >
+                  <ImagePlus className="w-4 h-4 mr-2" />
+                  {getActionFeedbackLabel(statuses.uploadImage, UPLOAD_IMAGE_LABELS)}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">

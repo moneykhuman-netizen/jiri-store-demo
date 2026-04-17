@@ -3,87 +3,159 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { Product } from "@/lib/admin-store";
+import type { Product } from "@/lib/admin-store";
+import { getPrimaryProductImage } from "@/lib/products";
 import { Badge } from "@/components/ui/badge";
 
 interface ProductCardProps {
   product: Product;
+  compact?: boolean;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, compact = false }: ProductCardProps) {
+  const primaryImage = getPrimaryProductImage(product);
+  const compactLabel = product.brand?.trim()
+    ? product.brand
+    : `${product.category}'s ${product.type}`;
+  const fullContent = (
+    <>
+      <div className="min-h-[3.75rem] md:min-h-[4.5rem]">
+        <p className="mb-1 truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {product.brand}
+        </p>
+
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-5 text-foreground transition-colors group-hover:text-accent md:min-h-[3rem] md:text-base md:leading-6">
+          {product.name}
+        </h3>
+      </div>
+
+      <div className="mt-auto flex flex-col gap-2 pt-3">
+        <div className="flex min-h-6 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 rounded bg-green-600 px-1.5 py-0.5 text-xs font-medium text-white">
+            {product.rating}
+            <Star className="h-3 w-3 fill-current" />
+          </div>
+          <span className="truncate text-xs text-muted-foreground">
+            ({product.reviews.toLocaleString()})
+          </span>
+        </div>
+
+        <div className="flex min-h-[3rem] flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-lg font-bold text-foreground">
+            Rs {product.price.toLocaleString()}
+          </span>
+          {product.originalPrice > product.price && (
+            <span className="text-sm text-muted-foreground line-through">
+              Rs {product.originalPrice.toLocaleString()}
+            </span>
+          )}
+        </div>
+
+        <p className="line-clamp-1 min-h-4 text-xs capitalize text-muted-foreground">
+          {product.category}&apos;s {product.type}
+        </p>
+      </div>
+    </>
+  );
+
   return (
-    <Link href={`/product/${product.id}`} className="group block">
-      <div className={`bg-card rounded-lg overflow-hidden border border-border ${product.inStock ? 'hover:border-ring hover:shadow-lg' : ''} transition-all duration-300`}>
-        {/* Image Container */}
-        <div className="relative aspect-square overflow-hidden bg-secondary">
+    <Link href={`/product/${product.id}`} className="group block h-full min-w-0">
+      <div
+        className={`bg-stone-50 rounded-lg overflow-hidden border border-stone-200 ${
+          product.inStock ? "hover:border-neutral-200 hover:scale-[1.02] active:scale-[0.98]" : "opacity-70"
+        } flex h-full min-w-0 flex-col shadow-sm transition-all duration-200`}
+      >
+        <div
+          className={`relative w-full shrink-0 overflow-hidden bg-neutral-50 ${
+            compact ? "aspect-[4/3] md:aspect-square" : "aspect-square"
+          }`}
+        >
           <Image
-            src={product.images[0]}
+            src={primaryImage}
             alt={product.name}
             fill
-            className={`object-cover group-hover:scale-105 transition-transform duration-500 ${!product.inStock ? 'opacity-50' : ''}`}
+            loading="lazy"
+            className={`object-cover group-hover:scale-105 transition-transform duration-500 ${
+              !product.inStock ? "opacity-50" : ""
+            }`}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
-          {/* Badges */}
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
+          <div
+            className={`absolute top-2 left-2 z-10 flex-col gap-1 ${
+              compact ? "flex md:flex" : "flex"
+            }`}
+          >
             {product.isNew && (
-              <Badge className="bg-accent text-accent-foreground text-xs">
+              <Badge
+                className={`bg-accent text-accent-foreground ${
+                  compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"
+                }`}
+              >
                 NEW
               </Badge>
             )}
             {product.discount > 0 && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge
+                variant="destructive"
+                className={compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"}
+              >
                 {product.discount}% OFF
               </Badge>
             )}
             {!product.inStock && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge
+                variant="destructive"
+                className={compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"}
+              >
                 Out of Stock
               </Badge>
             )}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-3 md:p-4">
-          {/* Brand */}
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            {product.brand}
-          </p>
+        <div className={`flex min-h-0 flex-1 flex-col ${compact ? "p-2.5 md:p-4" : "p-3 md:p-4"}`}>
+          {compact ? (
+            <>
+              <div className="flex min-h-0 flex-1 flex-col md:hidden">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    {compactLabel}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5 rounded bg-green-600 px-1 py-0.5 text-[10px] font-medium text-white">
+                    {product.rating}
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                  </div>
+                </div>
 
-          {/* Name */}
-          <h3 className="font-medium text-sm md:text-base text-foreground line-clamp-2 group-hover:text-accent transition-colors">
-            {product.name}
-          </h3>
+                <h3 className="line-clamp-2 min-h-[2.4rem] text-sm font-medium leading-snug text-foreground transition-colors group-hover:text-accent">
+                  {product.name}
+                </h3>
 
-          {/* Rating */}
-          <div className="flex items-center gap-1 mt-2">
-            <div className="flex items-center gap-0.5 bg-green-600 text-white px-1.5 py-0.5 rounded text-xs font-medium">
-              {product.rating}
-              <Star className="h-3 w-3 fill-current" />
-            </div>
-            <span className="text-xs text-muted-foreground">
-              ({product.reviews.toLocaleString()})
-            </span>
-          </div>
+                <div className="mt-auto space-y-1 pt-2">
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <span className="text-sm font-bold text-foreground">
+                      Rs {product.price.toLocaleString()}
+                    </span>
+                    {product.originalPrice > product.price && (
+                      <span className="text-[11px] text-muted-foreground line-through">
+                        Rs {product.originalPrice.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
 
-          {/* Price */}
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-lg font-bold text-foreground">
-              Rs {product.price.toLocaleString()}
-            </span>
-            {product.originalPrice > product.price && (
-              <>
-                <span className="text-sm text-muted-foreground line-through">
-                  Rs {product.originalPrice.toLocaleString()}
-                </span>
-              </>
-            )}
-          </div>
+                  <p className="line-clamp-1 text-[10px] capitalize text-muted-foreground">
+                    {product.category}&apos;s {product.type}
+                  </p>
+                </div>
+              </div>
 
-          {/* Type */}
-          <p className="text-xs text-muted-foreground mt-1.5 capitalize">
-            {product.category}&apos;s {product.type}
-          </p>
+              <div className="hidden min-h-0 flex-1 flex-col md:flex">
+                {fullContent}
+              </div>
+            </>
+          ) : (
+            fullContent
+          )}
         </div>
       </div>
     </Link>

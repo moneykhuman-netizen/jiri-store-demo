@@ -1,9 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { useAdminStore } from "@/lib/admin-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Tags, DollarSign, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
 import Link from "next/link";
+
+const LOW_STOCK_THRESHOLD = 15;
+const LOW_STOCK_SUMMARY_LIMIT = 5;
 
 export default function DashboardPage() {
   const products = useAdminStore((state) => state.products);
@@ -14,8 +18,19 @@ export default function DashboardPage() {
   const totalBrands = brands.length;
   const totalCategories = categories.men.length + categories.women.length;
   const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
-  const lowStockProducts = products.filter((p) => p.stock < 15);
+  const lowStockProducts = useMemo(
+    () =>
+      products
+        .filter((product) => product.stock < LOW_STOCK_THRESHOLD)
+        .sort((a, b) => a.stock - b.stock || a.name.localeCompare(b.name)),
+    [products]
+  );
   const outOfStock = products.filter((p) => p.stock === 0);
+  const lowStockSummaryProducts = lowStockProducts.slice(0, LOW_STOCK_SUMMARY_LIMIT);
+  const remainingLowStockCount = Math.max(
+    lowStockProducts.length - lowStockSummaryProducts.length,
+    0
+  );
 
   const stats = [
     {
@@ -103,24 +118,32 @@ export default function DashboardPage() {
               Low Stock Alert
             </CardTitle>
             <CardDescription>
-              Products with less than 15 units in stock
+              Top {LOW_STOCK_SUMMARY_LIMIT} lowest-stock products under {LOW_STOCK_THRESHOLD} units
             </CardDescription>
           </CardHeader>
           <CardContent>
             {lowStockProducts.length > 0 ? (
-              <ul className="space-y-2">
-                {lowStockProducts.slice(0, 5).map((product) => (
-                  <li key={product.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate flex-1">{product.name}</span>
-                    <span className="font-medium text-amber-600 ml-2">{product.stock} left</span>
-                  </li>
-                ))}
-                {lowStockProducts.length > 5 && (
-                  <li className="text-sm text-muted-foreground">
-                    +{lowStockProducts.length - 5} more items
-                  </li>
-                )}
-              </ul>
+              <div className="space-y-3">
+                <ul className="space-y-2">
+                  {lowStockSummaryProducts.map((product) => (
+                    <li key={product.id} className="flex items-center justify-between text-sm">
+                      <span className="truncate flex-1">{product.name}</span>
+                      <span className="font-medium text-amber-600 ml-2">{product.stock} left</span>
+                    </li>
+                  ))}
+                </ul>
+                {remainingLowStockCount > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    +{remainingLowStockCount} more low-stock products
+                  </p>
+                ) : null}
+                <Link
+                  href="/admin/inventory?stock=low"
+                  className="inline-flex text-sm font-medium text-amber-700 transition-colors hover:text-amber-800 hover:underline"
+                >
+                  View all {lowStockProducts.length} low-stock products
+                </Link>
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle className="w-5 h-5" />
@@ -197,7 +220,7 @@ export default function DashboardPage() {
                       Rs {product.price.toLocaleString()}
                     </td>
                     <td className="py-3 text-sm text-right">
-                      <span className={product.stock < 15 ? "text-amber-600 font-medium" : ""}>
+                      <span className={product.stock < LOW_STOCK_THRESHOLD ? "text-amber-600 font-medium" : ""}>
                         {product.stock}
                       </span>
                     </td>

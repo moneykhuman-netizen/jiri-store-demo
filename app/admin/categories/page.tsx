@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Trash2, FolderTree } from "lucide-react";
+import { ArrowLeft, FolderTree, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 export default function CategoriesPage() {
@@ -76,7 +76,7 @@ export default function CategoriesPage() {
     return (
       <div className="space-y-6">
         {/* Add Category */}
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <div className="flex-1">
             <Input
               placeholder={`Enter ${gender === "men" ? "men's" : "women's"} category`}
@@ -91,7 +91,7 @@ export default function CategoriesPage() {
               <p className="text-sm text-destructive mt-1">{error[gender]}</p>
             )}
           </div>
-          <Button onClick={() => handleAddCategory(gender)}>
+          <Button onClick={() => handleAddCategory(gender)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Add
           </Button>
@@ -194,7 +194,7 @@ export default function CategoriesPage() {
               {categoryToDeleteInfo && categoryToDeleteInfo.count > 0 && (
                 <span className="block mt-2 text-amber-600">
                   Warning: This category has {categoryToDeleteInfo.count} associated products.
-                  The products will not be deleted but will need to be reassigned.
+                  Deleting it will remove those products from the backbone and clean any featured or new-arrival references automatically.
                 </span>
               )}
             </AlertDialogDescription>
