@@ -14,6 +14,9 @@ interface ProductCardProps {
 
 export function ProductCard({ product, compact = false }: ProductCardProps) {
   const primaryImage = getPrimaryProductImage(product);
+  const compactLabel = product.brand?.trim()
+    ? product.brand
+    : `${product.category}'s ${product.type}`;
   const fullContent = (
     <>
       <div className="min-h-[3.75rem] md:min-h-[4.5rem]">
@@ -78,22 +81,32 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           />
           <div
-            className={`absolute top-2 left-2 flex-col gap-1 ${
-              compact ? "hidden md:flex" : "flex"
+            className={`absolute top-2 left-2 z-10 flex-col gap-1 ${
+              compact ? "flex md:flex" : "flex"
             }`}
           >
             {product.isNew && (
-              <Badge className="bg-accent text-accent-foreground text-xs">
+              <Badge
+                className={`bg-accent text-accent-foreground ${
+                  compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"
+                }`}
+              >
                 NEW
               </Badge>
             )}
             {product.discount > 0 && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge
+                variant="destructive"
+                className={compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"}
+              >
                 {product.discount}% OFF
               </Badge>
             )}
             {!product.inStock && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge
+                variant="destructive"
+                className={compact ? "px-1.5 py-0.5 text-[10px]" : "text-xs"}
+              >
                 Out of Stock
               </Badge>
             )}
@@ -104,13 +117,35 @@ export function ProductCard({ product, compact = false }: ProductCardProps) {
           {compact ? (
             <>
               <div className="flex min-h-0 flex-1 flex-col md:hidden">
-                <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug text-foreground transition-colors group-hover:text-accent">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <p className="line-clamp-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    {compactLabel}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5 rounded bg-green-600 px-1 py-0.5 text-[10px] font-medium text-white">
+                    {product.rating}
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                  </div>
+                </div>
+
+                <h3 className="line-clamp-2 min-h-[2.4rem] text-sm font-medium leading-snug text-foreground transition-colors group-hover:text-accent">
                   {product.name}
                 </h3>
-                <div className="mt-auto pt-2">
-                  <span className="text-sm font-bold text-foreground">
-                    Rs {product.price.toLocaleString()}
-                  </span>
+
+                <div className="mt-auto space-y-1 pt-2">
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <span className="text-sm font-bold text-foreground">
+                      Rs {product.price.toLocaleString()}
+                    </span>
+                    {product.originalPrice > product.price && (
+                      <span className="text-[11px] text-muted-foreground line-through">
+                        Rs {product.originalPrice.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="line-clamp-1 text-[10px] capitalize text-muted-foreground">
+                    {product.category}&apos;s {product.type}
+                  </p>
                 </div>
               </div>
 

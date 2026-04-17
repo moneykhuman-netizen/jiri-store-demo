@@ -590,7 +590,7 @@ export default function ProductPage({
                 <div className="w-10 h-10 mx-auto rounded-full bg-secondary flex items-center justify-center mb-2">
                   <RotateCcw className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <p className="text-xs text-muted-foreground">7 Day Returns</p>
+                <p className="text-xs text-muted-foreground">7 Day Exchange</p>
               </div>
             </div>
           </div>
