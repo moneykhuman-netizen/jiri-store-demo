@@ -3,92 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BrandsSectionSkeleton } from "@/components/homepage-section-skeletons";
-import { BrandTheme, useAdminStore } from "@/lib/admin-store";
+import { useAdminStore } from "@/lib/admin-store";
 import { subscribeBrandsFromFirebase } from "@/lib/firebase/brands";
+import {
+  getBrandLogoText,
+  getPremiumBrandCardClassName,
+} from "@/lib/brand-card-styles";
 import { ChevronRight } from "lucide-react";
 
 const BRANDS_REMOTE_TIMEOUT_MS = 4000;
-
-const brandStyles: Record<string, { bg: string; accent: string; logo: string }> = {
-  Nike: { 
-    bg: "bg-gradient-to-br from-neutral-900 to-neutral-800", 
-    accent: "text-white",
-    logo: "NIKE"
-  },
-  Adidas: { 
-    bg: "bg-gradient-to-br from-neutral-900 to-neutral-700", 
-    accent: "text-white",
-    logo: "adidas"
-  },
-  Puma: { 
-    bg: "bg-gradient-to-br from-red-600 to-red-700", 
-    accent: "text-white",
-    logo: "PUMA"
-  },
-  Reebok: { 
-    bg: "bg-gradient-to-br from-red-700 to-red-800", 
-    accent: "text-white",
-    logo: "Reebok"
-  },
-  Skechers: { 
-    bg: "bg-gradient-to-br from-blue-600 to-blue-700", 
-    accent: "text-white",
-    logo: "SKECHERS"
-  },
-  "New Balance": { 
-    bg: "bg-gradient-to-br from-neutral-800 to-neutral-900", 
-    accent: "text-red-500",
-    logo: "NB"
-  },
-  Clarks: {
-    bg: "bg-gradient-to-br from-yellow-700 to-yellow-800",
-    accent: "text-white",
-    logo: "CLARKS"
-  },
-  Woodland: {
-    bg: "bg-gradient-to-br from-green-700 to-green-800",
-    accent: "text-white",
-    logo: "WOODLAND"
-  },
-};
-
-const themeStyles: Record<Exclude<BrandTheme, "auto">, { bg: string; accent: string }> = {
-  neutral: {
-    bg: "bg-gradient-to-br from-neutral-900 to-neutral-700",
-    accent: "text-white",
-  },
-  red: {
-    bg: "bg-gradient-to-br from-red-600 to-red-700",
-    accent: "text-white",
-  },
-  blue: {
-    bg: "bg-gradient-to-br from-blue-600 to-blue-700",
-    accent: "text-white",
-  },
-  green: {
-    bg: "bg-gradient-to-br from-green-700 to-green-800",
-    accent: "text-white",
-  },
-  gold: {
-    bg: "bg-gradient-to-br from-yellow-700 to-yellow-800",
-    accent: "text-white",
-  },
-};
-
-const brandColors: Record<string, string> = {
-  Nike: "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
-  Adidas: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
-  Puma: "bg-gradient-to-br from-rose-900 to-rose-700 text-white",
-  Reebok: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
-  Skechers: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
-  "New Balance": "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
-  Clarks: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
-  Woodland: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
-  Bata: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
-  "Air Jordan": "bg-gradient-to-br from-neutral-700 to-neutral-900 text-white",
-  Asic: "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900",
-  Hoka: "bg-gradient-to-br from-emerald-900 to-emerald-700 text-white",
-};
 
 export function BrandsSection() {
   const productsReady = useAdminStore((s) => s.productsReady);
@@ -96,15 +19,11 @@ export function BrandsSection() {
   const brandPresentations = useAdminStore((s) => s.brandPresentations);
   const setBrandsFromRemote = useAdminStore((s) => s.setBrandsFromRemote);
   const [isRemoteResolved, setIsRemoteResolved] = useState(false);
-  const [hasRemoteBrandConfig, setHasRemoteBrandConfig] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeBrandsFromFirebase((remote) => {
       if (remote) {
         setBrandsFromRemote(remote.brands, remote.brandPresentations);
-        setHasRemoteBrandConfig(true);
-      } else {
-        setHasRemoteBrandConfig(false);
       }
       setIsRemoteResolved(true);
     });
@@ -118,22 +37,6 @@ export function BrandsSection() {
 
     return () => window.clearTimeout(timeoutId);
   }, []);
-
-  // light-themed fallback styles for unknown brands
-  const fallbackStyles = [
-    { bg: "bg-yellow-100", accent: "text-black" },
-    { bg: "bg-blue-100", accent: "text-black" },
-    { bg: "bg-pink-100", accent: "text-black" },
-    { bg: "bg-green-100", accent: "text-black" },
-    { bg: "bg-orange-100", accent: "text-black" },
-    { bg: "bg-purple-100", accent: "text-black" },
-  ];
-
-  const computeFallback = (brand: string) => {
-    let sum = 0;
-    for (let i = 0; i < brand.length; i++) sum += brand.charCodeAt(i);
-    return fallbackStyles[sum % fallbackStyles.length];
-  };
 
   if (!productsReady || !isRemoteResolved) {
     return <BrandsSectionSkeleton />;
@@ -168,24 +71,10 @@ export function BrandsSection() {
         {/* Brands Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {brands.map((brand) => {
-            const baseStyle = brandStyles[brand] || (() => {
-              const f = computeFallback(brand);
-              return { bg: f.bg, accent: f.accent, logo: brand };
-            })();
             const presentation = brandPresentations[brand];
-            const theme =
-              hasRemoteBrandConfig &&
-              presentation?.theme &&
-              presentation.theme !== "auto"
-                ? themeStyles[presentation.theme]
-                : null;
-            const style = theme
-              ? { ...baseStyle, bg: theme.bg, accent: theme.accent }
-              : baseStyle;
-            const tagline = hasRemoteBrandConfig
-              ? presentation?.tagline?.trim() ?? ""
-              : "";
-            const colorClassName = brandColors[brand] ?? "bg-gradient-to-br from-stone-100 to-stone-200 text-neutral-900";
+            const tagline = presentation?.tagline?.trim() ?? "";
+            const colorClassName = getPremiumBrandCardClassName(brand, presentation?.theme);
+            const logoText = getBrandLogoText(brand);
 
             return (
               <Link
@@ -195,7 +84,7 @@ export function BrandsSection() {
               >
                 {/* Brand Logo Text */}
                 <span className="text-sm font-semibold text-center leading-tight line-clamp-2 z-10">
-                  {style.logo}
+                  {logoText}
                 </span>
                 
                 {/* Subtle tagline */}
