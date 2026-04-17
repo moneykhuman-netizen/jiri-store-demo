@@ -102,7 +102,7 @@ export default function BrandsPage() {
           <CardDescription>Enter a brand name to add to the store</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <Input
                 placeholder="Enter brand name"
@@ -115,7 +115,7 @@ export default function BrandsPage() {
               />
               {error && <p className="text-sm text-destructive mt-1">{error}</p>}
             </div>
-            <Button onClick={handleAddBrand}>
+            <Button onClick={handleAddBrand} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Add Brand
             </Button>
